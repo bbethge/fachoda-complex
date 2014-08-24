@@ -5,8 +5,14 @@ cscope.out
 core
 core.*
 *.swp
-.depend
-*.dep
+.deps/
 gmon.out
 .highscores
 .keys
+Makefile
+Makefile.in
+configure
+config.log
+config.status
+aclocal.m4
+autom4te.cache/
