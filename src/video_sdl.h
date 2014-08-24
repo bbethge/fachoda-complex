@@ -20,7 +20,7 @@
 #define VIDEOSDL_H_120302
 
 #include <stdbool.h>
-#include <SDL/SDL.h>
+#include "SDL.h"
 #include "proto.h"
 
 extern struct pixel32 *videobuffer;

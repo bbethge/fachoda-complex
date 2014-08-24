@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
-#include <SDL/SDL.h>
+#include "SDL.h"
 
 SDLKey getkey(void)
 {
