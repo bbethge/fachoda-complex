@@ -21,6 +21,7 @@
 #include <values.h>
 #include "heightfield.h"
 #include "video_sdl.h"
+#include "SDL_opengl.h"
 
 int zoom = 200, map_x = 0, map_y = 0;
 
@@ -115,6 +116,8 @@ static void draw_bg(void)
 {
     int x,y;
     struct vect2dc p1,p2,p3,p4;
+    glClearColor(0, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
     for (y=0; y<MAP_LEN-1; y++) {
         for (x=0; x<MAP_LEN-1; x++) {
             bpoint(&p1,x,y);
@@ -124,14 +127,6 @@ static void draw_bg(void)
             poly_gouraud(&p1,&p2,&p3);
             poly_gouraud(&p3,&p2,&p4);
         }
-    }
-    bpoint(&p1,0,0);
-    bpoint(&p2,MAP_LEN-1,MAP_LEN-1);
-    for (y=0; y<win_height; y++) {
-        if (p1.v.x>0) memset32((int*)videobuffer+y*win_width,0,p1.v.x);
-        if (p2.v.x<win_width) memset32((int*)videobuffer+y*win_width+p2.v.x-1,0,win_width-p2.v.x+1);
-        if (y<p2.v.y) memset32((int*)videobuffer+y*win_width+MAX(0,p1.v.x),0,MIN(p2.v.x,win_width)-MAX(0,p1.v.x));
-        if (y>p1.v.y) memset32((int*)videobuffer+y*win_width+MAX(0,p1.v.x),0,MIN(p2.v.x,win_width)-MAX(0,p1.v.x));
     }
 }
 

@@ -23,6 +23,7 @@
 #include <values.h>
 #include "video_sdl.h"
 #include "heightfield.h"
+#include "SDL_opengl.h"
 
 // Length of the vision square
 #define VIEW_LEN_N 5
@@ -402,7 +403,10 @@ static void dot(struct vecic const *p)
 
     if (l.x < 0 || l.x >= win_width || l.y < 0 || l.y >= win_height) return;
 
-    videobuffer[l.y * win_width + l.x] = pixel32_of_pixel(p->c);
+    glColor3ub(p->c.r, p->c.g, p->c.b);
+    glBegin(GL_POINTS);
+    glVertex2i(l.x, l.y);
+    glEnd();
 }
 
 // This restartable random generator is used to locate dots on the poly.
@@ -846,69 +850,9 @@ void draw_ground_and_objects(void)
     }
 }
 
-#define Gourovf 8   // NE PAS CHANGER !
-#define Gourovfm (1>>Gourovf)
-static int Gouroxi, Gouroyi, Gourolx, Gouroql, Gouroqx, Gouroqr, Gouroqg, Gouroqb, Gourocoulr, Gourocoulg, Gourocoulb, *Gourovid, Gourody, Gouroir, Gouroig, Gouroib;
-
-static void gouraud_section(void)
-{
-    int cr, cg, cb;
-    if (Gouroyi<0) {
-        if (Gouroyi<-Gourody) {
-            Gouroyi+=Gourody;
-            Gouroxi+=Gourody*Gouroqx;
-            Gourolx+=Gourody*Gouroql;
-            Gourocoulr+=Gourody*Gouroqr;
-            Gourocoulg+=Gourody*Gouroqg;
-            Gourocoulb+=Gourody*Gouroqb;
-            return;
-        } else {
-            Gouroxi-=Gouroyi*Gouroqx;
-            Gourolx-=Gouroyi*Gouroql;
-            Gourocoulr-=Gouroyi*Gouroqr;
-            Gourocoulg-=Gouroyi*Gouroqg;
-            Gourocoulb-=Gouroyi*Gouroqb;
-            Gourody+=Gouroyi;
-            Gouroyi=0;
-        }
-    }
-    Gourovid=(int*)videobuffer+Gouroyi*win_width;
-    while (Gourody>0 && Gouroyi<win_height) {
-        int i=Gouroxi>>Gourovf;
-        int ilim=i-(Gourolx>>Gourovf);
-        if (ilim<0) ilim=0;
-        cr=Gourocoulr;
-        cg=Gourocoulg;
-        cb=Gourocoulb;
-        if (i>=win_width) {
-            cr+=(i-win_width+1)*Gouroir;
-            cg+=(i-win_width+1)*Gouroig;
-            cb+=(i-win_width+1)*Gouroib;
-            i=win_width-1;
-        }
-        if (i>=ilim) {
-            do {
-                Gourovid[i]=((cb>>Gourovf)&0xFF)+(((cg>>Gourovf)&0xFF)<<8)+(((cr>>Gourovf)&0xFF)<<16);
-                i--;
-                cr+=Gouroir; cb+=Gouroib; cg+=Gouroig;
-            } while (i>=ilim);
-        }
-        Gouroxi+=Gouroqx;
-        Gourolx+=Gouroql;
-        Gourocoulr+=Gouroqr;
-        Gourocoulg+=Gouroqg;
-        Gourocoulb+=Gouroqb;
-        Gourovid+=win_width;
-        Gourody--;
-        Gouroyi++;
-    }
-}
-
 bool poly_gouraud(struct vect2dc *p1, struct vect2dc *p2, struct vect2dc *p3)
 {
     struct vect2dc *tmp, *p_maxx, *p_minx;
-    int q1, q2, q3=0, qxx, ql2;
-    int qr1, qr2, qr3=0, qg1, qg2, qg3=0, qb1, qb2, qb3=0, qrr, qgg, qbb;
     // order points in ascending Y
     if (p2->v.y<p1->v.y) { tmp=p1; p1=p2; p2=tmp; }
     if (p3->v.y<p1->v.y) { tmp=p1; p1=p3; p3=tmp; }
@@ -922,127 +866,14 @@ bool poly_gouraud(struct vect2dc *p1, struct vect2dc *p2, struct vect2dc *p3)
     if (p2->v.x<p_minx->v.x) p_minx=p2;
     if (p3->v.x<p_minx->v.x) p_minx=p3;
     if (p_minx->v.x>win_width) return false;
-    Gouroyi=p1->v.y;
-    if (p1->v.y!=p2->v.y) {
-        Gouroxi=p1->v.x<<Gourovf;
-        Gourocoulb=p1->c.b<<Gourovf;
-        Gourocoulg=p1->c.g<<Gourovf;
-        Gourocoulr=p1->c.r<<Gourovf;
-        q1=((p2->v.x-p1->v.x)<<Gourovf)/(p2->v.y-p1->v.y);
-        qr1=(((int)(p2->c.r-p1->c.r))<<Gourovf)/(p2->v.y-p1->v.y);
-        qg1=(((int)(p2->c.g-p1->c.g))<<Gourovf)/(p2->v.y-p1->v.y);
-        qb1=(((int)(p2->c.b-p1->c.b))<<Gourovf)/(p2->v.y-p1->v.y);
-        q2=((p3->v.x-p1->v.x)<<Gourovf)/(p3->v.y-p1->v.y);
-        qr2=(((int)(p3->c.r-p1->c.r))<<Gourovf)/(p3->v.y-p1->v.y);
-        qg2=(((int)(p3->c.g-p1->c.g))<<Gourovf)/(p3->v.y-p1->v.y);
-        qb2=(((int)(p3->c.b-p1->c.b))<<Gourovf)/(p3->v.y-p1->v.y);
-        if (p3->v.y != p2->v.y) {
-            q3=((p3->v.x-p2->v.x)<<Gourovf)/(p3->v.y-p2->v.y);
-            qr3=(((int)(p3->c.r-p2->c.r))<<Gourovf)/(p3->v.y-p2->v.y);
-            qg3=(((int)(p3->c.g-p2->c.g))<<Gourovf)/(p3->v.y-p2->v.y);
-            qb3=(((int)(p3->c.b-p2->c.b))<<Gourovf)/(p3->v.y-p2->v.y);
-        }
-        Gourolx = Gourovfm;
-        if (q1<=q2) {
-            if(0 == (Gouroql=q2-q1)) Gouroql=1;     // increasing ratio of the scanline length, avoiding 0
-            if(0 == (ql2=q2-q3)) ql2=-1;
-            Gouroqx=q2; qxx=q2;
-            Gouroqr=qr2; Gouroqg=qg2; Gouroqb=qb2; qrr=qr2; qgg=qg2; qbb=qb2;
-            if (p2->v.y-p1->v.y > p3->v.y-p2->v.y) {
-#define QLPREC (Gourovfm/4)
-                if (Gouroql>QLPREC) {
-                    Gouroir=((qr1-qr2)<<Gourovf)/Gouroql;
-                    Gouroig=((qg1-qg2)<<Gourovf)/Gouroql;
-                    Gouroib=((qb1-qb2)<<Gourovf)/Gouroql;
-                } else Gouroir=Gouroig=Gouroib=0;
-            } else {
-                if (ql2<-QLPREC) {
-                    Gouroir=((qr3-qr2)<<Gourovf)/ql2;
-                    Gouroig=((qg3-qg2)<<Gourovf)/ql2;
-                    Gouroib=((qb3-qb2)<<Gourovf)/ql2;
-                } else Gouroir=Gouroig=Gouroib=0;
-            }
-        } else {    // q1>q2
-            if (0 == (Gouroql=q1-q2)) Gouroql=1;
-            if (0 == (ql2=q3-q2)) ql2=-1;
-            Gouroqx=q1; qxx=q3;
-            Gouroqr=qr1; Gouroqg=qg1; Gouroqb=qb1; qrr=qr3; qgg=qg3; qbb=qb3;
-            if (p2->v.y-p1->v.y > p3->v.y-p2->v.y) {
-                if (Gouroql>QLPREC) {
-                    Gouroir=((qr2-qr1)<<Gourovf)/Gouroql;
-                    Gouroig=((qg2-qg1)<<Gourovf)/Gouroql;
-                    Gouroib=((qb2-qb1)<<Gourovf)/Gouroql;
-                } else Gouroir=Gouroig=Gouroib=0;
-            } else {
-                if (ql2<-QLPREC) {
-                    Gouroir=((qr2-qr3)<<Gourovf)/ql2;
-                    Gouroig=((qg2-qg3)<<Gourovf)/ql2;
-                    Gouroib=((qb2-qb3)<<Gourovf)/ql2;
-                } else Gouroir=Gouroig=Gouroib=0;
-            }
-        }
-        Gourody=p2->v.y-p1->v.y;
-        gouraud_section();
-        Gouroqx=qxx; Gouroql=ql2;
-        Gouroqr=qrr; Gouroqg=qgg; Gouroqb=qbb;
-        Gourody=p3->v.y-p2->v.y+1;
-        gouraud_section();
-    } else {    // flat base
-        if (p3->v.y > p2->v.y) {    // a triangle nonetheless
-            q2=((p3->v.x-p1->v.x)<<Gourovf)/(p3->v.y-p1->v.y);
-            qr2=(((int)(p3->c.r-p1->c.r))<<Gourovf)/(p3->v.y-p1->v.y);
-            qg2=(((int)(p3->c.g-p1->c.g))<<Gourovf)/(p3->v.y-p1->v.y);
-            qb2=(((int)(p3->c.b-p1->c.b))<<Gourovf)/(p3->v.y-p1->v.y);
-            q3=((p3->v.x-p2->v.x)<<Gourovf)/(p3->v.y-p2->v.y);
-            qr3=(((int)(p3->c.r-p2->c.r))<<Gourovf)/(p3->v.y-p2->v.y);
-            qg3=(((int)(p3->c.g-p2->c.g))<<Gourovf)/(p3->v.y-p2->v.y);
-            qb3=(((int)(p3->c.b-p2->c.b))<<Gourovf)/(p3->v.y-p2->v.y);
-            if (p2->v.x >= p1->v.x) {
-                Gouroxi=p2->v.x<<Gourovf;
-                Gourocoulb=p2->c.b<<Gourovf;
-                Gourocoulg=p2->c.g<<Gourovf;
-                Gourocoulr=p2->c.r<<Gourovf;
-                Gourolx = (p2->v.x-p1->v.x)<<Gourovf;
-                if(!(Gouroql=q3-q2)) Gouroql=-1;
-                Gouroqx=q3;
-                Gouroqr=qr3; Gouroqg=qg3; Gouroqb=qb3;
-                if (Gouroql<-QLPREC) {
-                    Gouroir=((qr2-qr3)<<Gourovf)/Gouroql;
-                    Gouroig=((qg2-qg3)<<Gourovf)/Gouroql;
-                    Gouroib=((qb2-qb3)<<Gourovf)/Gouroql;
-                } else Gouroir=Gouroig=Gouroib=0;
-            } else {
-                Gouroxi=p1->v.x<<Gourovf;
-                Gourocoulb=p1->c.b<<Gourovf;
-                Gourocoulg=p1->c.g<<Gourovf;
-                Gourocoulr=p1->c.r<<Gourovf;
-                Gourolx = (p1->v.x-p2->v.x)<<Gourovf;
-                if(0 == (Gouroql=q2-q3)) Gouroql=-1;
-                Gouroqx=q2;
-                Gouroqr=qr2; Gouroqg=qg2; Gouroqb=qb2;
-                if (Gouroql < -QLPREC) {
-                    Gouroir=((qr3-qr2)<<Gourovf)/Gouroql;
-                    Gouroig=((qg3-qg2)<<Gourovf)/Gouroql;
-                    Gouroib=((qb3-qb2)<<Gourovf)/Gouroql;
-                } else Gouroir=Gouroib=Gouroig=0;
-            }
-            Gourody=p3->v.y-p1->v.y+1;
-            gouraud_section();
-        } else {    // flat segment
-            Gouroxi=p_maxx->v.x<<Gourovf;
-            if(!(Gourolx=(p_maxx->v.x-p_minx->v.x)<<Gourovf)) Gourolx=Gourovfm;
-            Gourocoulb=p_maxx->c.b<<Gourovf;
-            Gourocoulg=p_maxx->c.g<<Gourovf;
-            Gourocoulr=p_maxx->c.r<<Gourovf;
-            if (Gourolx > QLPREC) {
-                Gouroir=(p_minx->c.r-p_maxx->c.r)<<Gourovf/Gourolx;
-                Gouroig=(p_minx->c.g-p_maxx->c.g)<<Gourovf/Gourolx;
-                Gouroib=(p_minx->c.b-p_maxx->c.b)<<Gourovf/Gourolx;
-            } else Gouroir=Gouroig=Gouroib=0;
-            Gourody=1;
-            gouraud_section();
-        }
-    }
+    glBegin(GL_TRIANGLES);
+    glColor3ub(p1->c.r, p1->c.g, p1->c.b);
+    glVertex2i(p1->v.x, p1->v.y);
+    glColor3ub(p2->c.r, p2->c.g, p2->c.b);
+    glVertex2i(p2->v.x, p2->v.y);
+    glColor3ub(p3->c.r, p3->c.g, p3->c.b);
+    glVertex2i(p3->v.x, p3->v.y);
+    glEnd();
     return true;
 }
 

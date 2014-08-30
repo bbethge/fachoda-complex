@@ -23,6 +23,7 @@
 #include "heightfield.h"
 #include "robot.h"
 #include "video_sdl.h"
+#include "SDL_opengl.h"
 
 char *tankname="Rug-Warrior";
 
@@ -193,10 +194,14 @@ void affjauge(float j)
     int nx,y,xx;
     nx=10+(int)(nj*(win_width-20.));
     if (nx>x) {
-        for (y=win_center_y-(win_height>>3); y<win_center_y+(win_height>>3); y++)
-            for (xx=x; xx<nx; xx++)
-                //*(int*)&videobuffer[y*win_width+xx]=0x3060A0;
-                MMXAddSatC((int*)&videobuffer[y*win_width+xx],0x001080);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
+        glColor3ub(0, 0x10, 0x80);
+        glRecti(
+                x, win_center_y-(win_height>>3),
+                nx, win_center_y+(win_height>>3));
+        glBlendFunc(GL_ONE, GL_ZERO);
+        glDisable(GL_BLEND);
         buffer2video();
         x=nx;
     }

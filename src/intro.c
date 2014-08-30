@@ -27,6 +27,7 @@
 #include "sound.h"
 #include "gtime.h"
 #include "video_sdl.h"
+#include "SDL_opengl.h"
 
 static struct {
     int nbkases;
@@ -167,30 +168,14 @@ static struct {
     }
 };
 
-void drawseg(int x1, int x2, int y, int c) {
-    if (x1<0) x1=0;
-    if (x2>win_width-1) x2=win_width-1;
-    if (y>=0 && y<win_height && x1<win_width && x2>=0)
-        memset32((int*)videobuffer+x1+y*win_width,c,x2-x1+1);
-}
 void disqueintro(int x, int y, int r, int c) {
-    int balance=-r, xoff=0, yoff=r, newyoff=1;
-    if (r<=0 || x-r>=win_width || x+r<0 || y-r>=win_height || y+r<0 || r>win_width) return;
-    do {
-        if (newyoff) {
-            drawseg(x-xoff,x+xoff,y+yoff,c);
-            drawseg(x-xoff,x+xoff,y-yoff,c);
-        }
-        if (xoff!=yoff) {
-            drawseg(x-yoff,x+yoff,y+xoff,c);
-            if (xoff) drawseg(x-yoff,x+yoff,y-xoff,c);
-        }
-        if ((balance += xoff + xoff + 1) >= 0) {
-            yoff --;
-            balance -= yoff + yoff;
-            newyoff=1;
-        } else newyoff=0;
-    } while (++xoff <= yoff);
+    int i, n = 4+r/2;
+    glColor3ub((c>>16)&0xFF, (c>>8)&0xFF, c&0xFF);
+    glBegin(GL_TRIANGLE_FAN);
+    for (i=0; i<n; i++) {
+        glVertex2f(x+r*cosf(2*M_PI*i/n), y+r*sinf(2*M_PI*i/n));
+    }
+    glEnd();
 }
 #define RAYONBOUTTON 40
 void button(int x, int y, char *label,char highlight) {
@@ -245,8 +230,10 @@ static int jauge(int vi, int max) {
         kzc = kazeclick(xmouse,ymouse,14);
         draw_page(14, .45 + .2*sin(phaz*.61), .5*M_PI + .2*sin(phaz));
         phaz += 2.1*dt_sec;
-        for (y=win_height/3-(win_height>>3); y<win_height/3+(win_height>>3); y++)
-            memset32((int*)videobuffer+y*win_width+10,0x3060A0,jx);
+        glColor3ub(0x30, 0x60, 0xA0);
+        glRecti(
+                10, win_height/3-(win_height>>3),
+                10+jx, win_height/3+(win_height>>3));
         pbignum(va,win_center_x,win_height/3-SizeBigCharY/2,2,1,0);
         plot_cursor(xmouse,ymouse);
         buffer2video();

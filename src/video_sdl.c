@@ -23,9 +23,9 @@
 #include "proto.h"
 #include "video_sdl.h"
 #include "sound.h"
+#include "SDL_opengl.h"
 
-static SDL_Surface *screen, *bufsurface;
-struct pixel32 *videobuffer;
+static SDL_Surface *screen;
 
 void initvideo(bool fullscreen)
 {
@@ -34,18 +34,17 @@ void initvideo(bool fullscreen)
         exit(1);
     }
     atexit(SDL_Quit);
-    screen = SDL_SetVideoMode(win_width, win_height, 0, SDL_SWSURFACE|SDL_ANYFORMAT|(fullscreen?SDL_FULLSCREEN:0));
+    screen = SDL_SetVideoMode(win_width, win_height, 0, SDL_HWSURFACE|SDL_OPENGL|SDL_ANYFORMAT|(fullscreen?SDL_FULLSCREEN:0));
     if (! screen) {
         fprintf(stderr,"Couldn't set video mode: %s\n",SDL_GetError());
         exit(1);
     }
     printf("Set %dx%d at %d bits-per-pixel mode\n",screen->w,screen->h,screen->format->BitsPerPixel);
-
-    bufsurface = SDL_CreateRGBSurfaceFrom((void*)videobuffer, win_width, win_height, 32, win_width*4, 0xFF0000, 0xFF00, 0xFF, 0);
-    if (! bufsurface) {
-        fprintf(stderr,"Couldn't get surface: %s\n",SDL_GetError());
-        exit(1);
-    }
+    glViewport(0, 0, win_width, win_height);
+    glPixelZoom(1, -1);
+    glMatrixMode(GL_PROJECTION);
+    glOrtho(0, win_width, win_height, 0, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
 
     SDL_ShowCursor(0);
     SDL_EventState(SDL_ACTIVEEVENT, SDL_ENABLE);
@@ -56,14 +55,7 @@ void initvideo(bool fullscreen)
 
 void buffer2video(void)
 {
-    SDL_Rect dstrect;
-    dstrect.x=dstrect.y=0;
-    dstrect.w=bufsurface->w;
-    dstrect.h=bufsurface->h;
-    if(SDL_BlitSurface(bufsurface,NULL,screen,&dstrect)<0) {
-        fprintf(stderr,"Couldn't blit: %s\n",SDL_GetError());
-    }
-    SDL_UpdateRects(screen,1,&dstrect);
+    SDL_GL_SwapBuffers();
 }
 
 int xmouse, ymouse;

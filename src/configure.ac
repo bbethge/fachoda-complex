@@ -14,6 +14,7 @@ AC_CHECK_LIB([[m]], [[sqrt]], ,
              [AC_MSG_ERROR([[cannot find math library (libm)]])])
 AM_PATH_SDL
 PKG_CHECK_MODULES([OPENAL], [[openal]])
+PKG_CHECK_MODULES([GL], [[gl]])
 dnl libjpeg likes to define lots of its functions as macros depending
 dnl on its whim and the capabilities of the linker, so it's hard to
 dnl tell what the names of the actual functions are...

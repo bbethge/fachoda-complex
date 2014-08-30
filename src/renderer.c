@@ -24,6 +24,7 @@
 #include <assert.h>
 #include "video_sdl.h"
 #include "heightfield.h"
+#include "SDL_opengl.h"
 
 struct vect2dlum *pts2d;
 struct matrix *oL;
@@ -34,27 +35,17 @@ void initrender() {
 }
 void plot(int x, int y, int r)
 {
-    if(x<win_center_x && x>=-win_center_x && y<win_center_y && y>=-win_center_y) {
-        ((int*)videobuffer)[x+win_center_x+win_width*(y+win_center_y)]=r;
-    }
+    glColor3ub((r>>16)&0xFF, (r>>8)&0xFF, r&0xFF);
+    glBegin(GL_POINTS);
+    glVertex2i(x+win_center_x, y+win_center_y);
+    glEnd();
 }
 
 void mixplot(int x, int y, int r, int g, int b){
-    int c;
-    int rr,gg,bb;
-    if(x<win_center_x && x>=-win_center_x && y<win_center_y && y>=-win_center_y) {
-        c=((int*)videobuffer)[x+win_center_x+win_width*(y+win_center_y)];
-        rr=(c>>16)&0xFF;
-        gg=(c>>8)&0xFF;
-        bb=c&0xFF;
-        rr+=r;
-        gg+=g;
-        bb+=b;
-        rr>>=1;
-        gg>>=1;
-        bb>>=1;
-        ((int*)videobuffer)[x+win_center_x+win_width*(y+win_center_y)]=(rr<<16)+(gg<<8)+bb;
-    }
+    glColor4ub(r, g, b, 0x7F);
+    glBegin(GL_POINTS);
+    glVertex2i(x+win_center_x, y+win_center_y);
+    glEnd();
 }
 void plot_stick(int x,int y){
     plot(x-5,y,0xA0A0A0);
@@ -104,23 +95,15 @@ void plot_cursor(int x,int y) {
     a+=.31; ar+=.2;
 }
 void cercle(int x, int y, int radius, int c) {
-    int balance=-radius, xoff=0, yoff=radius;
-    do {
-        plot(x+xoff, y+yoff, c);
-        plot(x-xoff, y+yoff, c);
-        plot(x-xoff, y-yoff, c);
-        plot(x+xoff, y-yoff, c);
-        plot(x+yoff, y+xoff, c);
-        plot(x-yoff, y+xoff, c);
-        plot(x-yoff, y-xoff, c);
-        plot(x+yoff, y-xoff, c);
-
-        if ((balance += xoff + xoff + 1) >= 0) {
-            yoff --;
-            balance -= yoff + yoff;
-        }
-
-    } while (++xoff <= yoff);
+    int i, n = 4+radius/2;
+    glColor3ub((c>>16)&0xFF, (c>>8)&0xFF, c&0xFF);
+    glBegin(GL_LINE_STRIP);
+    for (i=0; i<=n; i++) {
+        glVertex2d(
+                x+win_center_x+radius*cos(2*M_PI*i/n),
+                y+win_center_y+radius*sin(2*M_PI*i/n));
+    }
+    glEnd();
 }
 
 extern inline int color_of_pixel(struct pixel c);
@@ -132,105 +115,23 @@ bool polyflat(struct vect2d *p1, struct vect2d *p2, struct vect2d *p3, struct pi
     int q1, q2, q3, ql, qx, qx2 = 0, ql2 = 0;
     struct pixel32 *vid;
 
-    if (p2->y<p1->y) { tmp=p1; p1=p2; p2=tmp; }
-    if (p3->y<p1->y) { tmp=p1; p1=p3; p3=tmp; }
-    if (p3->y<p2->y) { tmp=p2; p2=p3; p3=tmp; }
-    if (p1->y==p2->y && p1->x>p2->x) { tmp=p1; p1=p2; p2=tmp; }
-    if (p3->y<0 || p1->y>=win_height) return false;
-
-//  if (p3->y==p2->y) p3->y++;
-//  if (p1->y==p2->y) p1->y--;
-
-    yi=p1->y;
-
-    if (p3->y==p1->y) {
-        if (p1->x>p3->x) { tmp=p1; p1=p3; p3=tmp; }
-        if (p2->x<p3->x) { tmp=p2; p2=p3; p3=tmp; }
-        xi=p1->x<<vf;
-        lx = (p2->x - p1->x +1)<<vf;
-        yfin = yi+1;
-        qx = ql = 0;   // to please gcc
-        goto debtrace;
-    }
-    lx = 1<<vf;
-    xi=p1->x<<vf;
-
-    q1=((p3->x-p1->x)<<vf)/(p3->y-p1->y);   // et le cas p3y=p1y ?? maintenant il faut le traiter à part !
-    if (p1->y!=p2->y) {
-        q2=((p2->x-p1->x)<<vf)/(p2->y-p1->y);
-    } else {    // on a forcément p1x<p2x
-        q2 = MAXINT;
-        lx = (p2->x-p1->x+1)<<vf;
-    }
-    if (p3->y!=p2->y) {
-        q3=((p3->x-p2->x)<<vf)/(p3->y-p2->y);
-    } else {
-        q3=MAXINT;  // ou -MAXINT, mais comme on s'en sert pas..
-    }
-    if (q1<=q2) {
-        ql = (q2-q1)|1;     // le taux d'accroissement de la taille du segment (en évitant 0);
-        ql2= q3-q1;
-        qx=qx2=q1;
-    } else {
-        ql = (q1-q2)|1;
-        ql2= q1-q3;
-        qx=q2; qx2=q3;
-    }
-    // clipper les y<0 ! sinon ca fait des pauses !
-    yfin=p2->y;
-    if (p2->y<0) {
-        xi+=(p2->y-p1->y)*qx;
-        yi=p2->y;
-        lx+=(p2->y-p1->y)*ql;
-        yfin=p3->y; ql=ql2; qx=qx2;
-    }
-    if (yi<0) {
-        xi-=yi*qx;
-        lx-=yi*ql;
-        yi=0;
-    }
-debtrace:
-    vid=videobuffer+(yi)*win_width;
-
-    for (i=0; i<2; i++, yfin=p3->y, ql=ql2, qx=qx2){
-        while (yi<yfin && yi<win_height) {
-            jlim = (lx+xi)>>vf;
-            j = xi>>vf;
-            if (j < 0) j = 0;
-            if (jlim > win_width) jlim = win_width;
-            if (j < jlim) {
-                memset32((int*)(vid+j), color_of_pixel(coul), jlim-j);
-            }
-            xi += qx;
-            yi++;
-            lx += ql;
-            vid += win_width;
-        }
-    }
-    return true;
+    glColor3ub(coul.r, coul.g, coul.b);
+    glBegin(GL_TRIANGLES);
+    glVertex2i(p1->x, p1->y);
+    glVertex2i(p2->x, p2->y);
+    glVertex2i(p3->x, p3->y);
+    glEnd();
+    return MAX(p1->x, MAX(p2->x, p3->x)) >= 0
+        && MIN(p1->x, MIN(p2->x, p3->x)) < win_width
+        && MAX(p1->y, MAX(p2->y, p3->y)) >= 0
+        && MIN(p1->y, MIN(p2->y, p3->y)) < win_height;
 }
 void drawline(struct vect2d const *restrict p1, struct vect2d const *restrict p2, int col) {
-    int s, x,y,xi, dy;
-    struct vect2d const *tmp;
-    int q;
-    if (p1->x > p2->x) { tmp=p1; p1=p2; p2=tmp; }
-    if ((dy = p2->y - p1->y) > 0) {
-        s = 1;
-        q = ((p2->x - p1->x)<<vf)/(1+dy);
-    } else {
-        dy = -dy;
-        s = -1;
-        q = ((p2->x - p1->x)<<vf)/(1+dy);
-    }
-    // FIXME: clipping
-    if (p2->x - p1->x > win_width || dy > win_height) return;
-    x = p1->x<<vf;
-    for (y = p1->y; dy >= 0; dy--, y += s) {
-        for (xi = x>>vf; xi < 1+((x+q)>>vf); xi++) {
-            plot(xi - win_center_x, y - win_center_y, col);
-        }
-        x += q;
-    }
+    glColor3ub((col>>16)&0xFF, (col>>8)&0xFF, col&0xFF);
+    glBegin(GL_LINES);
+    glVertex2i(p1->x, p1->y);
+    glVertex2i(p2->x, p2->y);
+    glEnd();
 }
 
 void draw_rectangle(struct vect2d const *restrict min, struct vect2d const *restrict max, int col)
@@ -340,133 +241,99 @@ void calcposa(void)
     }
 }
 
-int zfac;
-
-static void phplot(int x, int y, int r) {
-    int ix=0,iy=zfac*r;
-    int balance=-r, xoff=0, yoff=r, newyoff=1;
-    if (r<=0 || y<0 || y>=win_height) return;
-    do {
-        int lum = ((iy&0xff00)<<8) | (iy&0xff00);
-        if (x+xoff>=0 && x+xoff<win_width) MMXAddSatC((int*)videobuffer+x+xoff+y*win_width, lum);
-        if (xoff && x-xoff>=0 && x-xoff<win_width) MMXAddSatC((int*)videobuffer+x-xoff+y*win_width, lum);
-        if (newyoff && xoff!=yoff) {
-            if (x+yoff>=0 && x+yoff<win_width) MMXAddSatC((int*)videobuffer+x+yoff+y*win_width, lum);
-            if (x-yoff>=0 && x-yoff<win_width) MMXAddSatC((int*)videobuffer+x-yoff+y*win_width, lum);
-        }
-        if ((balance += xoff + xoff + 1) >= 0) {
-            yoff--;
-            balance -= yoff + yoff;
-            newyoff=1;
-            iy-=zfac;
-        } else newyoff=0;
-        ix+=zfac;
-    } while (++xoff <= yoff);
-}
+// FIXME: currently just draws a simple yellow glow.
 void plotphare(int x, int y, int r) {
-    int balance=-r, xoff=0, yoff=r, newyoff=1;
-    if (r==0 || x-r>=win_width || x+r<0 || y-r>=win_height || y+r<0 || r>win_width) return;
-    zfac=(190<<8)/r;
-    do {
-        if (newyoff) {
-            phplot(x,y+yoff, xoff);
-            phplot(x,y-yoff, xoff);
-        }
-        if (xoff!=yoff) {
-            phplot(x,y+xoff, yoff);
-            if (xoff) phplot(x,y-xoff, yoff);
-        }
-        if ((balance += xoff + xoff) >= 0) {
-            yoff --;
-            balance -= yoff + yoff;
-            newyoff=1;
-        } else newyoff=0;
-        xoff++;
-    } while (xoff <= yoff);
+    int i, n=MAX(4+r/4,180);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    glBegin(GL_TRIANGLE_FAN);
+    glColor3ub(190, 190, 0);
+    glVertex2f(x, y);
+    glColor3ub(0, 0, 0);
+    for (i=0; i<=n; i++) {
+        glVertex2f(x+r*cosf(2*M_PI*i/n), y+r*sinf(2*M_PI*i/n));
+    }
+    glEnd();
+    glBlendFunc(GL_ONE, GL_ONE);
+    glDisable(GL_BLEND);
 }
 
-static void nuplot(int x, int y, int r) {
-    int ix=0,iy=zfac*r;
-    int balance=-r, xoff=0, yoff=r, newyoff=1;
-    if (r<=0 || y<0 || y>=win_height) return;
-    do {
-        if (x+xoff>=0 && x+xoff<win_width) MMXAddSat((int*)videobuffer+x+xoff+y*win_width,iy>>8);
-        if (xoff && x-xoff>=0 && x-xoff<win_width) MMXAddSat((int*)videobuffer+x-xoff+y*win_width,iy>>8);
-        if (newyoff && xoff!=yoff) {
-            if (x+yoff>=0 && x+yoff<win_width) MMXAddSat((int*)videobuffer+x+yoff+y*win_width,ix>>8);
-            if (x-yoff>=0 && x-yoff<win_width) MMXAddSat((int*)videobuffer+x-yoff+y*win_width,ix>>8);
-        }
-        if ((balance += xoff + xoff) >= 0) {
-            --yoff;
-            balance -= yoff + yoff;
-            newyoff=1;
-            iy-=zfac;
-        } else newyoff=0;
-        xoff++;
-        ix+=zfac;
-    } while (xoff <= yoff);
-}
-
+#define NUAGE_LUM 90
 void plotnuage(int x, int y, int r) {
-    int balance=-r, xoff=0, yoff=r, newyoff=1;
-    if (r==0 || x-r>=win_width || x+r<0 || y-r>=win_height || y+r<0 || r>win_width) return;
-    zfac=(90<<8)/r;
-    do {
-        if (newyoff) {
-            nuplot(x,y+yoff, xoff);
-            nuplot(x,y-yoff, xoff);
+    int n_rad=MIN(1+r/4,256), n_circ=MIN(4+r/2,180);
+    int i_rad, i_circ;
+    GLubyte lum_i, lum_o;
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    glBegin(GL_TRIANGLE_FAN);
+    glColor3ub(NUAGE_LUM, NUAGE_LUM, NUAGE_LUM);
+    glVertex2i(x, y);
+    lum_o = NUAGE_LUM*sqrtf(1-1.f/(n_rad*n_rad));
+    glColor3ub(lum_o, lum_o, lum_o);
+    for (i_circ = 0; i_circ <= n_circ; i_circ++) {
+        glVertex2f(
+                x+r/(float)n_rad*cosf(2*M_PI*i_circ/n_circ),
+                y+r/(float)n_rad*sinf(2*M_PI*i_circ/n_circ));
+    }
+    glEnd();
+    glBegin(GL_QUAD_STRIP);
+    for (i_rad = 2; i_rad <= n_rad; i_rad++) {
+        lum_i = lum_o;
+        lum_o = NUAGE_LUM*sqrtf(1-((float)i_rad/n_rad)*((float)i_rad/n_rad));
+        for (i_circ = 0; i_circ <= n_circ; i_circ++) {
+            glColor3ub(lum_i, lum_i, lum_i);
+            glVertex2f(
+                    x+r*(float)(i_rad-1)/n_rad*cosf(2*M_PI*i_circ/n_circ),
+                    y+r*(float)(i_rad-1)/n_rad*sinf(2*M_PI*i_circ/n_circ));
+            glColor3ub(lum_o, lum_o, lum_o);
+            glVertex2f(
+                    x+r*(float)i_rad/n_rad*cosf(2*M_PI*i_circ/n_circ),
+                    y+r*(float)i_rad/n_rad*sinf(2*M_PI*i_circ/n_circ));
         }
-        if (xoff!=yoff) {
-            nuplot(x,y+xoff, yoff);
-            if (xoff) nuplot(x,y-xoff, yoff);
-        }
-        if ((balance += xoff + xoff + 1) >= 0) {
-            yoff --;
-            balance -= yoff + yoff;
-            newyoff=1;
-        } else newyoff=0;
-    } while (++xoff <= yoff);
+    }
+    glEnd();
+    glBlendFunc(GL_ONE, GL_ZERO);
+    glDisable(GL_BLEND);
 }
 
-static void fuplot(int x, int y, int r) {
-    int ix=0,iy=zfac*r;
-    int balance=-r, xoff=0, yoff=r, newyoff=1;
-    if (r<=0 || y<0 || y>=win_height) return;
-    do {
-        if (x+xoff>=0 && x+xoff<win_width) MMXSubSat((int*)videobuffer+x+xoff+y*win_width,iy>>8);
-        if (xoff && x-xoff>=0 && x-xoff<win_width) MMXSubSat((int*)videobuffer+x-xoff+y*win_width,iy>>8);
-        if (newyoff && xoff!=yoff) {
-            if (x+yoff>=0 && x+yoff<win_width) MMXSubSat((int*)videobuffer+x+yoff+y*win_width,ix>>8);
-            if (x-yoff>=0 && x-yoff<win_width) MMXSubSat((int*)videobuffer+x-yoff+y*win_width,ix>>8);
-        }
-        if ((balance += xoff + xoff + 1) >= 0) {
-            yoff--;
-            balance -= yoff + yoff;
-            newyoff=1;
-            iy-=zfac;
-        } else newyoff=0;
-        ix+=zfac;
-    } while (++xoff <= yoff);
-}
+#define FUMEE_LUM 40
 void plotfumee(int x, int y, int r) {
-    int balance=-r, xoff=0, yoff=r, newyoff=1;
-    if (r==0 || x-r>=win_width || x+r<0 || y-r>=win_height || y+r<0 || r>win_width) return;
-    zfac=(40<<8)/r;
-    do {
-        if (newyoff) {
-            fuplot(x,y+yoff, xoff);
-            fuplot(x,y-yoff, xoff);
+    int n_rad=MIN(1+r/4,256), n_circ=MIN(4+r/2,180);
+    int i_rad, i_circ;
+    GLubyte lum_i, lum_o;
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
+    glBlendFunc(GL_ONE, GL_ONE);
+    glBegin(GL_TRIANGLE_FAN);
+    glColor3ub(FUMEE_LUM, FUMEE_LUM, FUMEE_LUM);
+    glVertex2i(x, y);
+    lum_o = FUMEE_LUM*sqrtf(1-1.f/(n_rad*n_rad));
+    glColor3ub(lum_o, lum_o, lum_o);
+    for (i_circ = 0; i_circ <= n_circ; i_circ++) {
+        glVertex2f(
+                x+r/(float)n_rad*cosf(2*M_PI*i_circ/n_circ),
+                y+r/(float)n_rad*sinf(2*M_PI*i_circ/n_circ));
+    }
+    glEnd();
+    glBegin(GL_QUAD_STRIP);
+    for (i_rad = 2; i_rad <= n_rad; i_rad++) {
+        lum_i = lum_o;
+        lum_o = FUMEE_LUM*sqrtf(1-((float)i_rad/n_rad)*((float)i_rad/n_rad));
+        for (i_circ = 0; i_circ <= n_circ; i_circ++) {
+            glColor3ub(lum_i, lum_i, lum_i);
+            glVertex2f(
+                    x+r*(float)(i_rad-1)/n_rad*cosf(2*M_PI*i_circ/n_circ),
+                    y+r*(float)(i_rad-1)/n_rad*sinf(2*M_PI*i_circ/n_circ));
+            glColor3ub(lum_o, lum_o, lum_o);
+            glVertex2f(
+                    x+r*(float)i_rad/n_rad*cosf(2*M_PI*i_circ/n_circ),
+                    y+r*(float)i_rad/n_rad*sinf(2*M_PI*i_circ/n_circ));
         }
-        if (xoff!=yoff) {
-            fuplot(x,y+xoff, yoff);
-            if (xoff) fuplot(x,y-xoff, yoff);
-        }
-        if ((balance += xoff + xoff + 1) >= 0) {
-            yoff --;
-            balance -= yoff + yoff;
-            newyoff=1;
-        } else newyoff=0;
-    } while (++xoff <= yoff);
+    }
+    glEnd();
+    glBlendFunc(GL_ONE, GL_ZERO);
+    glBlendEquation(GL_FUNC_ADD);
+    glDisable(GL_BLEND);
 }
 
 static void darken(uint8_t *b)

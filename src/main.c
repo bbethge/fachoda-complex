@@ -33,6 +33,7 @@
 #include "file.h"
 #include "video_sdl.h"
 #include "config.h"
+#include "SDL_opengl.h"
 
 //#define PRINT_DEBUG
 
@@ -98,37 +99,8 @@ void object_add(int mo, struct vector *p, struct matrix *m, int or, uint8_t sol)
     nb_obj++;
 }
 
-static void background_line(int *v,int sx,int dz,int z,int coul) {
-    int x;
-    uint8_t cz;
-    if (coul==-1) return;
-    if (coul==0) {
-        if (z>64<<8) z=64<<8;
-        else if (z<0) z=0;
-        if (!night_mode) for (x=0; x<sx; x++) {
-            uint8_t r;
-            cz=z>>8;
-            r=224-cz;
-            cz=-cz; //?
-            v[x]=(r<<16)+(r<<8)+(cz&0xFF);
-            z+=dz;
-        } else for (x=0; x<sx; x++) {
-            uint8_t r;
-            cz=z>>8;    // z>>8 entre 0 et 64
-            r=0x20+64-cz;
-            cz=0x40+64-cz;
-            v[x]=(r<<16)+(r<<8)+(cz&0xFF);
-            z+=dz;
-        }
-    } else {
-        memset32(v,coul,sx);
-    }
-}
-
 static void background(void)
 {
-    int z1,z2, dz1,dz2;
-    int dz, x, i, xfin;
     int zfront[3] = {64<<8,0,-64<<8};
 #   define sol 0x1A6834
 #   define soldark (0x1A6834>>1)
@@ -138,55 +110,42 @@ static void background(void)
         {ciel,0,sol,-1},
         {cieldark,0,soldark,-1}
     };
-    int *vid;
 
     // Compute position of the horizon (notice it's artificially lowered by 30 pixels)
-    z1=z2=(z_near*obj[0].rot.z.z-win_center_y*obj[0].rot.y.z+30)*256;
-    z1-=(win_center_x*obj[0].rot.x.z)*256;
-    z2+=(win_center_x*obj[0].rot.x.z)*256;
-    dz1=obj[0].rot.y.z*256;
-    dz2=obj[0].rot.y.z*256;
-    dz=(z2-z1)/win_width;
-#   define ZFINSOL ((-win_width/4)<<8)
-    for (vid=(int*)videobuffer; vid<(int*)videobuffer+win_width*win_height; vid+=win_width, z1+=dz1, z2+=dz2) {
-        if (z1>z2) {
-            for (i=0, x=0; i<3 && x<win_width; i++) {
-                if (z1>zfront[i]) {
-                    if (z2>zfront[i]) {
-                        xfin=win_width;
-                        background_line(vid+x,xfin-x,dz,z1,coulfront[night_mode][i]);
-                        x=xfin;
-                    } else {
-                        if (z1-z2!=0) {
-                            xfin=((z1-zfront[i])*win_width)/(z1-z2);
-                            if (xfin>win_width) xfin=win_width;
-                        } else xfin=win_width;
-                        background_line(vid+x,xfin-x,dz,z1,coulfront[night_mode][i]);
-                        x=xfin;
-                    }
-                }
-            }
-            if (x<win_width) background_line(vid+x,win_width-x,dz,z1,coulfront[night_mode][i]);
-        } else {
-            for (i=2, x=0; i>=0 && x<win_width; i--) {
-                if (z1<zfront[i]) {
-                    if (z2<zfront[i]) {
-                        xfin=win_width;
-                        background_line(vid+x,xfin-x,dz,z1,coulfront[night_mode][i+1]);
-                        x=xfin;
-                    } else {
-                        if (z1-z2!=0) {
-                            xfin=((z1-zfront[i])*win_width)/(z1-z2);
-                            if (xfin>win_width) xfin=win_width;
-                        } else xfin=win_width;
-                        background_line(vid+x,xfin-x,dz,z1,coulfront[night_mode][i+1]);
-                        x=xfin;
-                    }
-                }
-            }
-            if (x<win_width) background_line(vid+x,win_width-x,dz,z1,coulfront[night_mode][i+1]);
-        }
+    // z = z_near*rot.z.z - win_center_x*rot.x.z - win_center_y*rot.y.z + 30
+    //     + x*rot.x.z + y*rot.y.z
+    //   = z_near*rot.z.z + 30
+    //     + (x-win_center_x)*rot.x.z + (y-win_center_y)*rot.y.z
+    // HA = atan2(rot.x.z, -rot.y.z)
+    // mag = hypot(rot.x.z, rot.y.z)
+    // z = z0 - mag*(-Dx*sin(HA)+Dy*cos(HA)
+    // (Dx;Dy) = (cos(HA),-sin(HA);sin(HA),cos(HA))*(x';y')
+    // z = z0 - mag*y', y' = (z0-z)/mag
+    glPushMatrix();
+    glTranslatef(win_center_x, win_center_y, 0);
+    glRotatef(180/M_PI*atan2f(obj[0].rot.x.z, -obj[0].rot.y.z), 0, 0, 1);
+    float mag = hypotf(obj[0].rot.x.z, obj[0].rot.y.z);
+    float z0 = z_near*obj[0].rot.z.z+30;
+    glColor3ub(
+            (coulfront[night_mode][0]>>16)&0xFF,
+            (coulfront[night_mode][0]>>8)&0xFF, coulfront[night_mode][0]&0xFF);
+    glRectf(-win_width, -win_width, win_width, (z0-zfront[0]/256.f)/mag);
+    glBegin(GL_QUADS);
+    glVertex2f(win_width, (z0-zfront[0]/256.f)/mag);
+    glVertex2f(-win_width, (z0-zfront[0]/256.f)/mag);
+    if (!night_mode) {
+        glColor3ub(224, 224, 255);
+    } else {
+        glColor3ub(0x20+64, 0x20+64, 0x40+64);
     }
+    glVertex2f(-win_width, (z0-zfront[1]/256.f)/mag);
+    glVertex2f(win_width, (z0-zfront[1]/256.f)/mag);
+    glEnd();
+    glColor3ub(
+            (coulfront[night_mode][2]>>16)&0xFF,
+            (coulfront[night_mode][2]>>8)&0xFF, coulfront[night_mode][2]&0xFF);
+    glRectf(-win_width, (z0-zfront[1]/256.f)/mag, win_width, win_width);
+    glPopMatrix();
 }
 
 int viewed_bot = 0, viewed_obj = 0;
@@ -581,6 +540,11 @@ parse_error:
         file_read(&highscore, ARRAY_LEN(highscore)*sizeof(struct high_score), file);
         fclose(file);
     }
+
+    /*
+        VIDEO
+               */
+    initvideo(fullscreen);
     /* autres inits */
     loadfont("font.tga", 16,7, 10);
     loadbigfont("bigfont.tga");
@@ -590,16 +554,10 @@ parse_error:
     loadtbtile("metal50_50.tga");
     tbback_modern = tbback;
     initmapping();
+    drawtbback();
     initsol();
     for (i=0; i<NB_MARKS; i++) mark[i].x=MAXFLOAT;
     if (sound_init(with_sound)==-1) printf("No sound...\n");
-
-    /*
-        VIDEO
-               */
-    videobuffer = malloc(win_width*win_height*sizeof(*videobuffer));
-    initvideo(fullscreen);
-    drawtbback();
 
     // KEYS
     keys_load();
@@ -969,7 +927,12 @@ parse_error:
                     uint8_t u;
                     if ((i=scalaire(&obj[0].rot.z,&light.z))<-.9) {
                         u=(exp(-i-.9)-1)*2200;
-                        MMXAddSatInt((int*)videobuffer,(u<<16)+(u<<8)+u,win_width*win_height);
+                        glEnable(GL_BLEND);
+                        glBlendFunc(GL_ONE, GL_ONE);
+                        glColor3ub(u, u, u);
+                        glRecti(0, 0, win_width, win_height);
+                        glBlendFunc(GL_ONE, GL_ZERO);
+                        glDisable(GL_BLEND);
                     }
                 }
                 if (easy_mode) {

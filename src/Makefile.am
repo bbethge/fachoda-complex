@@ -1,6 +1,5 @@
 ## Process this file with automake to produce Makefile.in
 AM_CPPFLAGS = -DDATADIR='"$(pkgdatadir)"' -D_GNU_SOURCE
-AM_CFLAGS = $(SDL_CFLAGS)
 bin_PROGRAMS = fachoda getkeyname
 SUBDATADIRS = \
     snd snd2 \
@@ -22,7 +21,9 @@ fachoda_SOURCES = \
     present.c keycodes.c roads.c \
     init.c intro.c main.c video_sdl.c world.c \
     gtime.c file.c config.c
-fachoda_LDFLAGS = $(SDL_LIBS) $(OPENAL_LIBS)
+fachoda_CFLAGS = $(SDL_CFLAGS) $(GL_CFLAGS)
+fachoda_LDFLAGS = $(SDL_LIBS) $(OPENAL_LIBS) $(GL_LIBS)
 
 getkeyname_SOURCES = getkeyname.c
+getkeyname_CFLAGS = $(SDL_CFLAGS)
 getkeyname_LDFLAGS = $(SDL_LIBS)

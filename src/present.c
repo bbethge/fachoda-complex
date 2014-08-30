@@ -27,6 +27,7 @@
 #include "sound.h"
 #include "file.h"
 #include "video_sdl.h"
+#include "SDL_opengl.h"
 
 static struct pixel32 *presentimg;
 static int IMGX, IMGY;
@@ -73,12 +74,15 @@ void affpresent(int dx,int dy)
     int xb=((win_width-IMGX)>>1)+dx, yb=((win_height-IMGY)>>1)+dy, clipx1=0, clipx2=0;
     if (xb+IMGX>win_width) clipx2=xb+IMGX-win_width;
     if (xb<0) { clipx1=-xb; xb=0; }
-    memset32((int*)videobuffer,BACKCOLOR,win_width*win_height);
-    for (y=0; y<IMGY && y+yb<win_height; y++) {
-        if (y+yb>=0) {
-            memcpy(videobuffer+(y+yb)*win_width+xb, presentimg+y*IMGX+clipx1, (IMGX-clipx1-clipx2)*sizeof(*videobuffer));
-        }
-    }
+    glClearColor(
+            ((BACKCOLOR>>16)&0xFF)/255.0, ((BACKCOLOR>>8)&0xFF)/255.0,
+            (BACKCOLOR&0xFF)/255.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glRasterPos2i(xb, MAX(yb,0));
+    glDrawPixels(
+            IMGX-clipx1-clipx2, MIN(IMGY,win_height), GL_BGRA,
+            GL_UNSIGNED_INT_8_8_8_8_REV,
+            presentimg+MAX(0,-yb)*IMGX+clipx1);
 }
 
 static void affpresentanim(int d)
@@ -95,20 +99,26 @@ static void affpresentanim(int d)
             yd=y-d*drand48();
             if (yd<1) yd=1;
         }
-        memcpy(videobuffer+(y+yb)*win_width+xb, presentimg+yd*IMGX+clipx, (IMGX-clipx-clipx)*sizeof(*videobuffer));
+        glRasterPos2i(xb, y+yb);
+        glDrawPixels(
+                IMGX-2*clipx, 1, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
+                presentimg+yd*IMGX+clipx);
     }
 }
 
 void animpresent(void)
 {
     int d=20;
+    struct pixel32 *p;
     TextClipX1=(win_width-IMGX)/2;
     TextClipX2=(win_width-IMGX)/2+250;
     TextColfont=0xD0D0D0;
     jloadpresent();
-    memset32((int*)videobuffer,*(int*)(presentimg+IMGX+1),win_width*win_height);
+    p = presentimg+IMGX+1;
+    glClearColor(p->r/255., p->g/255., p->b/255., 1.);
     playsound(VOICE_EXTER, SAMPLE_PRESENT, 1., &voices_in_my_head, true, false);
     while (d) {
+        glClear(GL_COLOR_BUFFER_BIT);
         affpresentanim(d);
         d--;
         buffer2video();

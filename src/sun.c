@@ -21,6 +21,7 @@
 #include <math.h>
 #include "proto.h"
 #include "video_sdl.h"
+#include "SDL_opengl.h"
 
 #define SunMapX 64
 #define SunMapY 32
@@ -30,6 +31,7 @@
 static struct pixel32 SunMap[SunMapX * (SunMapY+1)];
 static double SunPicPh[20], SunPicOmega[20];
 static int SunImgAdy[SunImgL*SunImgL];
+static struct pixel32 SunImgRGBA[SunImgL*SunImgL];
 
 static struct {
     float x, y, z, xy;
@@ -159,18 +161,27 @@ void affsoleil(struct vector *L) {
                         }
                     }
                 }
+                memset(SunImgRGBA, 0, SunImgL*SunImgL*sizeof(*SunImgRGBA));
                 for (int y=0; y<SunImgL; y++) {
-                    if (y+yse>=0 && y+yse<win_height) {
-                        for (int x=0; x<SunImgL; x++) {
-                            if (x+xse>=0 && x+xse<win_width) {
-                                int a = SunImgAdy[y*SunImgL+x];
-                                if (a != -1) {
-                                    videobuffer[(y+yse)*win_width+x+xse] = SunMap[a];
-                                }
-                            }
+                    for (int x=0; x<SunImgL; x++) {
+                        int a = SunImgAdy[y*SunImgL+x];
+                        if (a != -1) {
+                            SunImgRGBA[y*SunImgL+x] = SunMap[a];
+                            SunImgRGBA[y*SunImgL+x].u = 255;
                         }
                     }
                 }
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                glRasterPos2i(MAX(xse,0), MAX(yse,0));
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, SunImgL);
+                glDrawPixels(
+                        SunImgL-MAX(-xse,0), SunImgL-MAX(-yse,0),
+                        GL_BGRA, GL_UNSIGNED_BYTE,
+                        SunImgRGBA+MAX(-yse,0)*SunImgL+MAX(-xse,0));
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+                glBlendFunc(GL_ONE, GL_ZERO);
+                glDisable(GL_BLEND);
             }
         }
     }
