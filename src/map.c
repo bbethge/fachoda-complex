@@ -37,7 +37,7 @@ static void plotchar(int x, int y, int c, unsigned char m)
 static void draw_fg(void)
 {
     static unsigned my_imgcount = 0;
-    struct vect2dlum p1,p2;
+    struct vect2d p1,p2;
     int o,i;
     int c[4]={ 0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00 };
     my_imgcount ++;
@@ -68,10 +68,10 @@ static void draw_fg(void)
     pchar('N',16,win_height-SizeCharY*3-10,0xF0F0F0);
     pchar('S',16,win_height-SizeCharY-10,0xF0F0F0);
     pchar(15+16,16,win_height-SizeCharY*2-10,0xA0A0A0);
-    p1.v.x=19; p1.v.y=win_height-SizeCharY*2+SizeCharY/2-10;
-    p2.v.x=10*cos(bot[viewed_bot].cap)+p1.v.x;
-    p2.v.y=-10*sin(bot[viewed_bot].cap)+p1.v.y;
-    drawline(&p1.v, &p2.v, c[(int)bot[viewed_bot].camp]);
+    p1.x=19; p1.y=win_height-SizeCharY*2+SizeCharY/2-10;
+    p2.x=10*cos(bot[viewed_bot].cap)+p1.x;
+    p2.y=-10*sin(bot[viewed_bot].cap)+p1.y;
+    drawline(&p1, &p2, c[(int)bot[viewed_bot].camp]);
 }
 
 static void bpoint(struct vect2dc *p, int x, int y)
@@ -96,17 +96,17 @@ static void draw_roads()
         {0xA0A0A0,0x808080},
         {0x503010,0x503010}
     };
-    struct vect2dlum p1,p2;
+    struct vect2d p1,p2;
     for (i=0; i<routeidx-1; i++) {
         if (i>EndMotorways) typ=1;
         if (i>EndRoads) typ=2;
         if (route[i].ak!=-1) {
-            p1.v.x=win_center_x+(route[i].i.x-TILE_LEN*map_x)*zoom/(TILE_LEN*MAP_LEN/2);
-            p1.v.y=win_center_y-(route[i].i.y-TILE_LEN*map_y)*zoom/(TILE_LEN*MAP_LEN/2);
+            p1.x=win_center_x+(route[i].i.x-TILE_LEN*map_x)*zoom/(TILE_LEN*MAP_LEN/2);
+            p1.y=win_center_y-(route[i].i.y-TILE_LEN*map_y)*zoom/(TILE_LEN*MAP_LEN/2);
             if (route[i+1].ak!=-1) {
-                p2.v.x=win_center_x+(route[i+1].i.x-TILE_LEN*map_x)*zoom/(TILE_LEN*MAP_LEN/2);
-                p2.v.y=win_center_y-(route[i+1].i.y-TILE_LEN*map_y)*zoom/(TILE_LEN*MAP_LEN/2);
-                drawline(&p1.v, &p2.v, coulr[typ][i&1]);
+                p2.x=win_center_x+(route[i+1].i.x-TILE_LEN*map_x)*zoom/(TILE_LEN*MAP_LEN/2);
+                p2.y=win_center_y-(route[i+1].i.y-TILE_LEN*map_y)*zoom/(TILE_LEN*MAP_LEN/2);
+                drawline(&p1, &p2, coulr[typ][i&1]);
             }
         }
     }

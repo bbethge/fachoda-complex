@@ -281,9 +281,6 @@ void animate_water(float dt_sec)
  * Map Rendering
  */
 
-// Set to true for flat shadded landscape
-//#define FLAT_SHADDING 1
-
 /* This is an awful hack to skip drawing of roads when the ground is seen from below
  * (for instance, roads on the other side of a hill). Problems:
  * - this flag is set by the poly_gouraud function, while it should be set by the draw_ground
@@ -332,16 +329,7 @@ static void poly(struct vecic const *p1, struct vecic const *p2, struct vecic co
     l2.c = p2->c;
     proji(&l3.v, &p3->v);
     l3.c = p3->c;
-#   ifdef FLAT_SHADDING
-    struct pixel mix = {
-        .r = (l1.c.r + l2.c.r + l3.c.r) / 3,
-        .g = (l1.c.g + l2.c.g + l3.c.g) / 3,
-        .b = (l1.c.b + l2.c.b + l3.c.b) / 3,
-    };
-    some_poly_were_visible = polyflat(&l1.v, &l2.v, &l3.v, mix);
-#   else
     some_poly_were_visible = poly_gouraud(&l1, &l2, &l3);
-#   endif
 }
 
 void polyclip(struct vecic const *p1, struct vecic const *p2, struct vecic const *p3)

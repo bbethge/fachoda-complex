@@ -118,8 +118,8 @@ struct vect2d {
     int x, y;
 };
 
-struct vect2dlum {
-    struct vect2d v;
+struct vectorlum {
+    struct vector v;
     int xl, yl;
 };
 
@@ -128,8 +128,8 @@ struct vect2dc {
     struct pixel c;
 };
 
-struct vect2dm {
-    struct vect2d v;
+struct vectorm {
+    struct vector v;
     uint8_t mx, my;
 };
 
@@ -430,7 +430,7 @@ void plot_cursor(int x,int y);
 void cercle(int x, int y, int radius, int c);
 void draw_target(struct vector, int c);
 void draw_mark(struct vector, int c);
-bool polyflat(struct vect2d *p1, struct vect2d *p2, struct vect2d *p3, struct pixel color);
+void polyflat(struct vector *p1, struct vector *p2, struct vector *p3, struct pixel color);
 void drawline(struct vect2d const *restrict p1, struct vect2d const *restrict p2, int col);
 void draw_rectangle(struct vect2d const *restrict min, struct vect2d const *restrict max, int col);
 void drawline2(struct vect2d *p1, struct vect2d *p2, int col);
@@ -518,10 +518,10 @@ void physics_tank(int v, float dt_sec);
 void obj_check_pos(int i);
 void physics_zep(int z, float dt_sec);
 // mapping.c
-void polymap(struct vect2dm *p1, struct vect2dm *p2, struct vect2dm *p3);
+void polymap(struct vectorm *p1, struct vectorm *p2, struct vectorm *p3);
 void initmapping(void);
 extern int *mapping;
-void polyphong(struct vect2dlum *p1, struct vect2dlum *p2, struct vect2dlum *p3, struct pixel c);
+void polyphong(struct vectorlum *p1, struct vectorlum *p2, struct vectorlum *p3, struct pixel c);
 // control.c
 void next_dog_bot(void);
 void control(int b);

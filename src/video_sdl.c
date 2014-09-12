@@ -42,6 +42,7 @@ void initvideo(bool fullscreen)
     printf("Set %dx%d at %d bits-per-pixel mode\n",screen->w,screen->h,screen->format->BitsPerPixel);
     glViewport(0, 0, win_width, win_height);
     glPixelZoom(1, -1);
+    glFrontFace(GL_CW);
     glMatrixMode(GL_PROJECTION);
     glOrtho(0, win_width, win_height, 0, -1, 1);
     glMatrixMode(GL_MODELVIEW);

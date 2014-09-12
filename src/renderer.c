@@ -26,10 +26,10 @@
 #include "heightfield.h"
 #include "SDL_opengl.h"
 
-struct vect2dlum *pts2d;
+struct vectorlum *pts;
 struct matrix *oL;
 void initrender() {
-    pts2d = malloc(3000*sizeof(*pts2d));   // nbpts max par objets
+    pts = malloc(3000*sizeof(*pts));   // nbpts max par objets
 #define MAXNO 5000
     oL = malloc(MAXNO*sizeof(*oL));   // nb objet max dans un ak
 }
@@ -109,22 +109,13 @@ void cercle(int x, int y, int radius, int c) {
 extern inline int color_of_pixel(struct pixel c);
 extern inline struct pixel32 pixel32_of_pixel(struct pixel c);
 
-bool polyflat(struct vect2d *p1, struct vect2d *p2, struct vect2d *p3, struct pixel coul) {
-    struct vect2d *tmp;
-    int xi, yi, lx, i, j, jlim, yfin;
-    int q1, q2, q3, ql, qx, qx2 = 0, ql2 = 0;
-    struct pixel32 *vid;
-
+void polyflat(struct vector *p1, struct vector *p2, struct vector *p3, struct pixel coul) {
     glColor3ub(coul.r, coul.g, coul.b);
     glBegin(GL_TRIANGLES);
-    glVertex2i(p1->x, p1->y);
-    glVertex2i(p2->x, p2->y);
-    glVertex2i(p3->x, p3->y);
+    glVertex3f(p1->x, p1->y, p1->z);
+    glVertex3f(p2->x, p2->y, p2->z);
+    glVertex3f(p3->x, p3->y, p3->z);
     glEnd();
-    return MAX(p1->x, MAX(p2->x, p3->x)) >= 0
-        && MIN(p1->x, MIN(p2->x, p3->x)) < win_width
-        && MAX(p1->y, MAX(p2->y, p3->y)) >= 0
-        && MIN(p1->y, MIN(p2->y, p3->y)) < win_height;
 }
 void drawline(struct vect2d const *restrict p1, struct vect2d const *restrict p2, int col) {
     glColor3ub((col>>16)&0xFF, (col>>8)&0xFF, col&0xFF);
@@ -410,87 +401,87 @@ static void render_obj(int o, int no)
     }
 
     // actual drawing of meshed objects
-    struct vector c;
     struct matrix co;
     int mo = obj[o].distance<(TILE_LEN*TILE_LEN*.14) ? 0 : 1;
-    // on calcule alors la pos de la obj[0] dans le repère de l'objet, ie ObjT*(campos-objpos)
-    mulmtv(&obj[o].rot,&obj[o].t, &c);
-    neg(&c);
     // on calcule aussi la position de tous les points de l'objet dans le repere de la camera, ie CamT*Obj*u
     mulmt3(&co,&obj[0].rot,&obj[o].rot);
     for (int p=0; p<mod[obj[o].model].nbpts[mo]; p++) {
-        struct vector pts3d;
-        mulmv(&co, &mod[obj[o].model].pts[mo][p], &pts3d);
-        addv(&pts3d,&obj[o].posc);
-        if (pts3d.z>0) proj(&pts2d[p].v,&pts3d);
-        else pts2d[p].v.x = MAXINT;
+        pts[p].v = mod[obj[o].model].pts[mo][p];
         // on calcule aussi les projs des
         // norms dans le plan lumineux infiniment éloigné
         if (scalaire(&mod[obj[o].model].norm[mo][p],&oL[no].z)<0) {
-            pts2d[p].xl = scalaire(&mod[obj[o].model].norm[mo][p],&oL[no].x);
-            pts2d[p].yl = scalaire(&mod[obj[o].model].norm[mo][p],&oL[no].y);
-        } else pts2d[p].xl = MAXINT;
+            pts[p].xl = scalaire(&mod[obj[o].model].norm[mo][p],&oL[no].x);
+            pts[p].yl = scalaire(&mod[obj[o].model].norm[mo][p],&oL[no].y);
+        } else pts[p].xl = MAXINT;
     }
+    glPushMatrix();
+    glMultTransposeMatrixf((GLfloat [16]){
+            co.x.x, co.y.x, co.z.x, obj[o].posc.x,
+            co.x.y, co.y.y, co.z.y, obj[o].posc.y,
+            co.x.z, co.y.z, co.z.z, obj[o].posc.z,
+            0,      0,      0,      1});
     if (obj[o].type==TYPE_SHOT) {
-        if (pts2d[0].v.x!=MAXINT && pts2d[1].v.x!=MAXINT) drawline(&pts2d[0].v, &pts2d[1].v, 0xFFA0F0);
+        struct vector *pt = mod[obj[o].model].pts[mo];
+        glColor3ub(0xFF, 0xA0, 0xF0);
+        glBegin(GL_LINES);
+        glVertex3f(pt[0].x, pt[0].y, pt[0].z);
+        glVertex3f(pt[1].x, pt[1].y, pt[1].z);
+        glEnd();
     } else {
         for (int p=0; p<mod[obj[o].model].nbfaces[mo]; p++) {
-            // test de visibilité entre obj[0] et normale
-            struct vector t;
-            subv3(&mod[obj[o].model].pts[mo][mod[obj[o].model].fac[mo][p].p[0]], &c, &t);
-            if (scalaire(&t,&mod[obj[o].model].fac[mo][p].norm)<=0) {
-                if (pts2d[mod[obj[o].model].fac[mo][p].p[0]].v.x != MAXINT &&
-                        pts2d[mod[obj[o].model].fac[mo][p].p[1]].v.x != MAXINT &&
-                        pts2d[mod[obj[o].model].fac[mo][p].p[2]].v.x != MAXINT) {
-                    if (obj[o].type==TYPE_INSTRUMENTS && p>=mod[obj[o].model].nbfaces[mo]-2) {
-                        struct vect2dm pt[3];
-                        int i;
-                        for (i=0; i<3; i++) {
-                            pt[i].v.x=pts2d[mod[obj[o].model].fac[mo][p].p[i]].v.x;
-                            pt[i].v.y=pts2d[mod[obj[o].model].fac[mo][p].p[i]].v.y;
-                        }
-                        if (p-(mod[obj[o].model].nbfaces[mo]-2)) {
-                            pt[2].mx=MAP_MARGIN;
-                            pt[2].my=pannel_width+MAP_MARGIN;
-                            pt[0].mx=pannel_height+MAP_MARGIN;
-                            pt[0].my=MAP_MARGIN;
-                            pt[1].mx=pannel_height+MAP_MARGIN;
-                            pt[1].my=pannel_width+MAP_MARGIN;
-                        } else {
-                            pt[0].mx=MAP_MARGIN;
-                            pt[0].my=pannel_width+MAP_MARGIN;
-                            pt[1].mx=MAP_MARGIN;
-                            pt[1].my=MAP_MARGIN;
-                            pt[2].mx=pannel_height+MAP_MARGIN;
-                            pt[2].my=MAP_MARGIN;
-                        }
-                        polymap(&pt[0],&pt[1],&pt[2]);
-                    } else {
-                        struct pixel coul = mod[obj[o].model].fac[mo][p].color;
-                        if (night_mode) {
-                            if (obj[o].type != TYPE_INSTRUMENTS) {
-                                darken(&coul.r);
-                            }
-                            darken(&coul.g);
-                            darken(&coul.b);
-                        }
-                        if (pts2d[mod[obj[o].model].fac[mo][p].p[0]].xl!=MAXINT && pts2d[mod[obj[o].model].fac[mo][p].p[1]].xl!=MAXINT && pts2d[mod[obj[o].model].fac[mo][p].p[2]].xl!=MAXINT)
-                            polyphong(
-                                    &pts2d[mod[obj[o].model].fac[mo][p].p[0]],
-                                    &pts2d[mod[obj[o].model].fac[mo][p].p[1]],
-                                    &pts2d[mod[obj[o].model].fac[mo][p].p[2]],
-                                    coul);
-                        else
-                            polyflat(
-                                    &pts2d[mod[obj[o].model].fac[mo][p].p[0]].v,
-                                    &pts2d[mod[obj[o].model].fac[mo][p].p[1]].v,
-                                    &pts2d[mod[obj[o].model].fac[mo][p].p[2]].v,
-                                    coul);
-                    }
-                }
+            if (mod[obj[o].model].fac[mo][p].norm.x != 0 ||
+                    mod[obj[o].model].fac[mo][p].norm.y != 0 ||
+                    mod[obj[o].model].fac[mo][p].norm.z != 0) {
+                glEnable(GL_CULL_FACE);
             }
+            if (obj[o].type==TYPE_INSTRUMENTS && p>=mod[obj[o].model].nbfaces[mo]-2) {
+                struct vectorm pt[3];
+                int i;
+                for (i=0; i<3; i++) {
+                    pt[i].v=mod[obj[o].model].pts[mo][mod[obj[o].model].fac[mo][p].p[i]];
+                }
+                if (p-(mod[obj[o].model].nbfaces[mo]-2)) {
+                    pt[2].mx=MAP_MARGIN;
+                    pt[2].my=pannel_width+MAP_MARGIN;
+                    pt[0].mx=pannel_height+MAP_MARGIN;
+                    pt[0].my=MAP_MARGIN;
+                    pt[1].mx=pannel_height+MAP_MARGIN;
+                    pt[1].my=pannel_width+MAP_MARGIN;
+                } else {
+                    pt[0].mx=MAP_MARGIN;
+                    pt[0].my=pannel_width+MAP_MARGIN;
+                    pt[1].mx=MAP_MARGIN;
+                    pt[1].my=MAP_MARGIN;
+                    pt[2].mx=pannel_height+MAP_MARGIN;
+                    pt[2].my=MAP_MARGIN;
+                }
+                polymap(&pt[0],&pt[1],&pt[2]);
+            } else {
+                struct pixel coul = mod[obj[o].model].fac[mo][p].color;
+                if (night_mode) {
+                    if (obj[o].type != TYPE_INSTRUMENTS) {
+                        darken(&coul.r);
+                    }
+                    darken(&coul.g);
+                    darken(&coul.b);
+                }
+                if (pts[mod[obj[o].model].fac[mo][p].p[0]].xl!=MAXINT && pts[mod[obj[o].model].fac[mo][p].p[1]].xl!=MAXINT && pts[mod[obj[o].model].fac[mo][p].p[2]].xl!=MAXINT)
+                    polyphong(
+                            &pts[mod[obj[o].model].fac[mo][p].p[0]],
+                            &pts[mod[obj[o].model].fac[mo][p].p[1]],
+                            &pts[mod[obj[o].model].fac[mo][p].p[2]],
+                            coul);
+                else
+                    polyflat(
+                            &pts[mod[obj[o].model].fac[mo][p].p[0]].v,
+                            &pts[mod[obj[o].model].fac[mo][p].p[1]].v,
+                            &pts[mod[obj[o].model].fac[mo][p].p[2]].v,
+                            coul);
+            }
+            glDisable(GL_CULL_FACE);
         }
     }
+    glPopMatrix();
 }
 
 void renderer(int ak, enum render_part fast) {
@@ -529,6 +520,16 @@ void renderer(int ak, enum render_part fast) {
             } else o=obj[o].next;
         } while (o!=-1 && obj[o].next!=-1);
     }
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glFrustum(
+            -1, 1,
+            -(GLdouble)win_height/win_width, (GLdouble)win_height/win_width,
+            1, 10000);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glScalef(1, -1, -1);
     // affichage des ombres
     o=map[ak].first_obj; no=0;
     if (fast!=1) do {
@@ -548,18 +549,18 @@ void renderer(int ak, enum render_part fast) {
                     pts3d.z=z;
                     subv(&pts3d,&obj[0].pos);
                     mulmtv(&obj[0].rot,&pts3d,&pts3d);
-                    if (pts3d.z >0) proj(&pts2d[p].v,&pts3d);
-                    else pts2d[p].v.x = MAXINT;
+                    if (pts3d.z >0) pts[p].v = pts3d;
+                    else pts[p].v.x = MAXINT;
                 }
                 for (p=0; p<mod[obj[o].model].nbfaces[1]; p++) {
                     if (scalaire(&mod[obj[o].model].fac[1][p].norm,&oL[no].z)<=0 &&
-                            pts2d[mod[obj[o].model].fac[1][p].p[0]].v.x != MAXINT &&
-                            pts2d[mod[obj[o].model].fac[1][p].p[1]].v.x != MAXINT &&
-                            pts2d[mod[obj[o].model].fac[1][p].p[2]].v.x != MAXINT)
+                            pts[mod[obj[o].model].fac[1][p].p[0]].v.x != MAXINT &&
+                            pts[mod[obj[o].model].fac[1][p].p[1]].v.x != MAXINT &&
+                            pts[mod[obj[o].model].fac[1][p].p[2]].v.x != MAXINT)
                         polyflat(
-                                &pts2d[mod[obj[o].model].fac[1][p].p[0]].v,
-                                &pts2d[mod[obj[o].model].fac[1][p].p[1]].v,
-                                &pts2d[mod[obj[o].model].fac[1][p].p[2]].v,
+                                &pts[mod[obj[o].model].fac[1][p].p[0]].v,
+                                &pts[mod[obj[o].model].fac[1][p].p[1]].v,
+                                &pts[mod[obj[o].model].fac[1][p].p[2]].v,
                                 (struct pixel){ .r = 0, .g = 0, .b = 0});
                 }
             }
@@ -580,7 +581,15 @@ void renderer(int ak, enum render_part fast) {
         ) {
             if (obj[o].aff && obj[o].posc.z>-mod[obj[o].model].rayon) { // il faut déjà que l'objet soit un peu devant la caméra et que ce soit pas un objet à passer...
                 if (obj[o].type == TYPE_CLOUD || obj[o].type == TYPE_SMOKE || obj[o].type == TYPE_LIGHT) {
+                    glMatrixMode(GL_PROJECTION);
+                    glPushMatrix();
+                    glLoadIdentity();
+                    glOrtho(0, win_width, win_height, 0, -1, 1);
+                    glMatrixMode(GL_MODELVIEW);
                     render_sphere(o);
+                    glMatrixMode(GL_PROJECTION);
+                    glPopMatrix();
+                    glMatrixMode(GL_MODELVIEW);
                 } else {
                     render_obj(o, no);
                 }
@@ -588,6 +597,10 @@ void renderer(int ak, enum render_part fast) {
         }
         if (fast!=1) { o=obj[o].prec; no--; } else o=obj[o].next;
     } while (o!=-1);
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
 }
 
 static bool to_camera(struct vector const *v3d, struct vect2d *v2d)

@@ -52,7 +52,7 @@ void initmapping(void)
     mapping = malloc(256*256*sizeof(*mapping));
 }
 
-void polymap(struct vect2dm *p1, struct vect2dm *p2, struct vect2dm *p3) {
+void polymap(struct vectorm *p1, struct vectorm *p2, struct vectorm *p3) {
     glEnable(GL_TEXTURE_2D);
     glTexImage2D(
         GL_TEXTURE_2D, 0, GL_RGB, 256, 256, 0, GL_BGRA,
@@ -62,11 +62,11 @@ void polymap(struct vect2dm *p1, struct vect2dm *p2, struct vect2dm *p3) {
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
     glBegin(GL_TRIANGLES);
     glTexCoord2f(p1->mx/255.f, p1->my/255.f);
-    glVertex2i(p1->v.x, p1->v.y);
+    glVertex3f(p1->v.x, p1->v.y, p1->v.z);
     glTexCoord2f(p2->mx/255.f, p2->my/255.f);
-    glVertex2i(p2->v.x, p2->v.y);
+    glVertex3f(p2->v.x, p2->v.y, p2->v.z);
     glTexCoord2f(p3->mx/255.f, p3->my/255.f);
-    glVertex2i(p3->v.x, p3->v.y);
+    glVertex3f(p3->v.x, p3->v.y, p3->v.z);
     glEnd();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(
@@ -75,18 +75,18 @@ void polymap(struct vect2dm *p1, struct vect2dm *p2, struct vect2dm *p3) {
     glDisable(GL_TEXTURE_2D);
 }
 
-void polyphong(struct vect2dlum *p1, struct vect2dlum *p2, struct vect2dlum *p3, struct pixel coul) {
+void polyphong(struct vectorlum *p1, struct vectorlum *p2, struct vectorlum *p3, struct pixel coul) {
     glBindTexture(GL_TEXTURE_2D, precatex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_ADD);
     glEnable(GL_TEXTURE_2D);
     glColor3ub(coul.r, coul.g, coul.b);
     glBegin(GL_TRIANGLES);
     glTexCoord2d(p1->xl/(float)(1<<(16-vf)), p1->yl/(float)(1<<(16-vf)));
-    glVertex2i(p1->v.x, p1->v.y);
+    glVertex3f(p1->v.x, p1->v.y, p1->v.z);
     glTexCoord2d(p2->xl/(float)(1<<(16-vf)), p2->yl/(float)(1<<(16-vf)));
-    glVertex2i(p2->v.x, p2->v.y);
+    glVertex3f(p2->v.x, p2->v.y, p2->v.z);
     glTexCoord2d(p3->xl/(float)(1<<(16-vf)), p3->yl/(float)(1<<(16-vf)));
-    glVertex2i(p3->v.x, p3->v.y);
+    glVertex3f(p3->v.x, p3->v.y, p3->v.z);
     glEnd();
     glDisable(GL_TEXTURE_2D);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
