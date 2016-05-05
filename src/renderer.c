@@ -41,12 +41,14 @@ void plot(int x, int y, int r)
     glEnd();
 }
 
+// Draw a pixel at 50% opacity
 void mixplot(int x, int y, int r, int g, int b){
     glColor4ub(r, g, b, 0x7F);
     glBegin(GL_POINTS);
     glVertex2i(x+win_center_x, y+win_center_y);
     glEnd();
 }
+// Draw a small white crosshair
 void plot_stick(int x,int y){
     plot(x-5,y,0xA0A0A0);
     plot(x+5,y,0xA0A0A0);
@@ -69,6 +71,7 @@ void plot_stick(int x,int y){
     plot(x,y-1,0xE0E0E0);
     plot(x,y+1,0xE0E0E0);
 }
+// Draw a tiny yellow ball
 void plotboule(int x,int y) {
     plot(x,y-1,0xA0A020);
     plot(x+1,y-1,0x909020);
@@ -83,6 +86,7 @@ void plotboule(int x,int y) {
     plot(x,y+2,0x808020);
     plot(x+1,y+2,0x606020);
 }
+// Draw an animated cursor made of four yellow balls
 void plot_cursor(int x,int y) {
     static float a=0, ar=0;
     float r=8*sin(ar);
@@ -94,6 +98,7 @@ void plot_cursor(int x,int y) {
     plotboule(x-s-win_center_x,y+c-win_center_y);
     a+=.31; ar+=.2;
 }
+// Draw a circle (unfilled)
 void cercle(int x, int y, int radius, int c) {
     int i, n = 4+radius/2;
     glColor3ub((c>>16)&0xFF, (c>>8)&0xFF, c&0xFF);
@@ -232,6 +237,8 @@ void calcposa(void)
     }
 }
 
+// Add yellow with amplitude 190*max(sqrt(r**2-(xx-x)**2-(yy-y)**2), |xx-x|)/r
+// to the videobuffer within the disk (xx-x)**2+(yy-y)**2 < r**2.
 // FIXME: currently just draws a simple yellow glow.
 void plotphare(int x, int y, int r) {
     int i, n=MAX(4+r/4,180);
@@ -249,6 +256,9 @@ void plotphare(int x, int y, int r) {
     glDisable(GL_BLEND);
 }
 
+// Lighten the pixels in the videobuffer within the disk
+// (xx-x)**2+(yy-y)**2 < r**2 by
+// 90*sqrt(r**2-(xx-x)**2-(yy-y)**2)/r.
 #define NUAGE_LUM 90
 void plotnuage(int x, int y, int r) {
     int n_rad=MIN(1+r/4,256), n_circ=MIN(4+r/2,180);
@@ -287,6 +297,9 @@ void plotnuage(int x, int y, int r) {
     glDisable(GL_BLEND);
 }
 
+// Darken the pixels in the videobuffer within the disk
+// (xx-x)**2+(yy-y)**2 < r**2 by
+// 40*sqrt(r**2-(xx-x)**2-(yy-y)**2)/r.
 #define FUMEE_LUM 40
 void plotfumee(int x, int y, int r) {
     int n_rad=MIN(1+r/4,256), n_circ=MIN(4+r/2,180);
@@ -586,7 +599,10 @@ void renderer(int ak, enum render_part fast) {
                     glLoadIdentity();
                     glOrtho(0, win_width, win_height, 0, -1, 1);
                     glMatrixMode(GL_MODELVIEW);
+                    glPushMatrix();
+                    glScalef(1, -1, -1);
                     render_sphere(o);
+                    glPopMatrix();
                     glMatrixMode(GL_PROJECTION);
                     glPopMatrix();
                     glMatrixMode(GL_MODELVIEW);

@@ -29,8 +29,8 @@ void buffer2video(void);
 
 void initvideo(bool fullscreen);
 
-bool kread(SDLKey);
-bool kreset(SDLKey);
+bool kread(SDL_Scancode);
+bool kreset(SDL_Scancode);
 bool button_read(unsigned b);
 bool button_reset(unsigned b);
 

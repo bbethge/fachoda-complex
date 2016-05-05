@@ -21,13 +21,13 @@
 #include <assert.h>
 #include "SDL.h"
 
-SDLKey getkey(void)
+SDL_Scancode getkey(void)
 {
     SDL_Event event;
     while (SDL_WaitEvent(&event) >= 0) {
         switch (event.type) {
             case SDL_KEYDOWN:
-                return event.key.keysym.sym;
+                return event.key.keysym.scancode;
             case SDL_QUIT:
                 exit(0);
         }
@@ -45,18 +45,18 @@ int main(void)
         exit(1);
     }
     atexit(SDL_Quit);
-    SDL_Surface *screen = SDL_SetVideoMode(100, 100, 0, SDL_SWSURFACE|SDL_ANYFORMAT);
-    if (! screen) {
-        fprintf(stderr,"Couldn't set video mode: %s\n",SDL_GetError());
+    SDL_Window *window = SDL_CreateWindow("Get Key Name", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 100, 100, 0);
+    if (! window) {
+        fprintf(stderr,"Couldn't open a window: %s\n",SDL_GetError());
         exit(1);
     }
 
     printf("Focus the SDL window and press any key to see it's name (esc to quit)...\n");
 
     while (1) {
-        SDLKey k = getkey();
-        printf("%s\n", SDL_GetKeyName(k));
-        if (k == SDLK_ESCAPE) break;
+        SDL_Scancode k = getkey();
+        printf("%s\n", SDL_GetScancodeName(k));
+        if (k == SDL_SCANCODE_ESCAPE) break;
     }
 
     return 0;

@@ -25,21 +25,27 @@
 #include "sound.h"
 #include "SDL_opengl.h"
 
-static SDL_Surface *screen;
+static SDL_Window *window;
 
 void initvideo(bool fullscreen)
 {
+    int w, h;
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         fprintf(stderr,"Couln't initialize SDL: %s\n",SDL_GetError());
         exit(1);
     }
     atexit(SDL_Quit);
-    screen = SDL_SetVideoMode(win_width, win_height, 0, SDL_HWSURFACE|SDL_OPENGL|SDL_ANYFORMAT|(fullscreen?SDL_FULLSCREEN:0));
-    if (! screen) {
-        fprintf(stderr,"Couldn't set video mode: %s\n",SDL_GetError());
+    window = SDL_CreateWindow("FACHODA Complex", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, win_width, win_height, SDL_WINDOW_SHOWN|SDL_WINDOW_OPENGL|(fullscreen?SDL_WINDOW_FULLSCREEN:0));
+    if (! window) {
+        fprintf(stderr,"Couldn't open a window: %s\n",SDL_GetError());
         exit(1);
     }
-    printf("Set %dx%d at %d bits-per-pixel mode\n",screen->w,screen->h,screen->format->BitsPerPixel);
+    SDL_GetWindowSize(window, &w, &h);
+    printf("Set %dx%d mode\n",w,h);
+    if (! SDL_GL_CreateContext(window)) {
+        fprintf(stderr,"Couldn't create an OpenGL context: %s\n",SDL_GetError());
+        exit(1);
+    }
     glViewport(0, 0, win_width, win_height);
     glPixelZoom(1, -1);
     glFrontFace(GL_CW);
@@ -48,33 +54,28 @@ void initvideo(bool fullscreen)
     glMatrixMode(GL_MODELVIEW);
 
     SDL_ShowCursor(0);
-    SDL_EventState(SDL_ACTIVEEVENT, SDL_ENABLE);
-    SDL_EventState(SDL_MOUSEMOTIONMASK, SDL_IGNORE);
-
-    SDL_WM_SetCaption("FACHODA Complex","FACHODA Complex");
+    SDL_EventState(SDL_WINDOWEVENT, SDL_ENABLE);
+    SDL_EventState(SDL_MOUSEMOTION, SDL_IGNORE);
 }
 
 void buffer2video(void)
 {
-    SDL_GL_SwapBuffers();
+    SDL_GL_SwapWindow(window);
 }
 
 int xmouse, ymouse;
 static bool mouse_button[7];
 
-/* We use a bitfields of SDLK_LAST-FIRST pairs of bits.
+/* We use a bitfields of SDL_NUM_SCANCODES pairs of bits.
  * For each key, the first bit gives the actual pressed status,
  * and the second bit is set whenever the key was pressed in the past,
  * and is only reset to 0 when the key is processed (by kreset). */
-static uint8_t keytab[(SDLK_LAST-SDLK_FIRST+1)/4+1];
+static uint8_t keytab[(SDL_NUM_SCANCODES+3)/4];
 
-static unsigned bit_of_key(SDLKey k)
+static unsigned bit_of_key(SDL_Scancode k)
 {
-#   if SDLK_FIRST > 0
-    assert(k >= SDLK_FIRST);
-#   endif
-    assert(k <= SDLK_LAST);
-    return k - SDLK_FIRST;
+    assert(k < SDL_NUM_SCANCODES);
+    return (unsigned) k;
 }
 
 // Set both keybits to 1
@@ -107,12 +108,12 @@ static bool bittest(unsigned n)
     return !!(keytab[n/4] & (3U<<((n&3)*2)));
 }
 
-bool kread(SDLKey k)
+bool kread(SDL_Scancode k)
 {
     return bittest1(bit_of_key(k));
 }
 
-bool kreset(SDLKey k)
+bool kreset(SDL_Scancode k)
 {
     unsigned const n = bit_of_key(k);
     bool const r = bittest(n);
@@ -149,10 +150,10 @@ void xproceed(void)
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
             case SDL_KEYDOWN:
-                bitset(bit_of_key(event.key.keysym.sym));
+                bitset(bit_of_key(event.key.keysym.scancode));
                 break;
             case SDL_KEYUP:
-                bitzero1(bit_of_key(event.key.keysym.sym));
+                bitzero1(bit_of_key(event.key.keysym.scancode));
                 break;
             case SDL_MOUSEBUTTONDOWN:
                 if (event.button.button < ARRAY_LEN(mouse_button)) {
@@ -167,10 +168,16 @@ void xproceed(void)
             case SDL_QUIT:
                 quit_game = true;
                 break;
-            case SDL_ACTIVEEVENT:
-                if (event.active.state & SDL_APPACTIVE) {
-                    game_suspended = 0 == event.active.gain;
-                    game_suspended ? sound_suspend() : sound_resume();
+            case SDL_WINDOWEVENT:
+                switch (event.window.event) {
+                    case SDL_WINDOWEVENT_MINIMIZED:
+                        game_suspended = 1;
+                        sound_suspend();
+                        break;
+                    case SDL_WINDOWEVENT_RESTORED:
+                        game_suspended = 0;
+                        sound_resume();
+                        break;
                 }
                 break;
         }

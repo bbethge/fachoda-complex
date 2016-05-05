@@ -1532,8 +1532,8 @@ fachoda_SOURCES = \
     init.c intro.c main.c video_sdl.c world.c \
     gtime.c file.c config.c
 fachoda_CFLAGS = $(SDL_CFLAGS) $(GL_CFLAGS)
-fachoda_LDFLAGS = $(SDL_LIBS) $(OPENAL_LIBS) $(GL_LIBS)
+fachoda_LDADD = $(SDL_LIBS) $(OPENAL_LIBS) $(GL_LIBS)
 
 getkeyname_SOURCES = getkeyname.c
 getkeyname_CFLAGS = $(SDL_CFLAGS)
-getkeyname_LDFLAGS = $(SDL_LIBS)
+getkeyname_LDADD = $(SDL_LIBS)

@@ -12,7 +12,7 @@ PKG_PROG_PKG_CONFIG
 
 AC_CHECK_LIB([[m]], [[sqrt]], ,
              [AC_MSG_ERROR([[cannot find math library (libm)]])])
-AM_PATH_SDL
+AM_PATH_SDL2
 PKG_CHECK_MODULES([OPENAL], [[openal]])
 PKG_CHECK_MODULES([GL], [[gl]])
 dnl libjpeg likes to define lots of its functions as macros depending

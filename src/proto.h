@@ -557,10 +557,10 @@ void MMXCopyToScreen(int *dest, int *src, int sx, int sy, int width);
 extern uint8_t *BigFont;
 extern uint8_t font[112][10];
 // keycodes
-#include <SDL/SDL.h>
+#include "SDL_scancode.h"
 #define NBKEYS 44
 extern struct kc {
-    SDLKey kc;
+    SDL_Scancode kc;
     char const *varname;
 } gkeys[NBKEYS];
 // roads
