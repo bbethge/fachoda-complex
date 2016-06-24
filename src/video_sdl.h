@@ -20,8 +20,10 @@
 #define VIDEOSDL_H_120302
 
 #include <stdbool.h>
+#define GL_GLEXT_PROTOTYPES
 #include "SDL.h"
 #include "proto.h"
+#include "SDL_opengl.h"
 
 extern struct pixel32 *videobuffer;
 
@@ -37,5 +39,7 @@ bool button_reset(unsigned b);
 void xproceed(void);
 
 extern int xmouse, ymouse;
+extern GLint shader_position, shader_color, shader_tex_coord;
+extern GLint shader_tex_scale;
 
 #endif

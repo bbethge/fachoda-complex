@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <values.h>
+#define GL_GLEXT_PROTOTYPES
 #include "proto.h"
 #include "video_sdl.h"
 #include "SDL_opengl.h"
@@ -53,6 +54,25 @@ void initmapping(void)
 }
 
 void polymap(struct vectorm *p1, struct vectorm *p2, struct vectorm *p3) {
+    GLuint program;
+    GLint position, tex_coord;
+    GLfloat v[3][3] = {
+        { p1->v.x, p1->v.y, p1->v.z },
+        { p2->v.x, p2->v.y, p2->v.z },
+        { p3->v.x, p3->v.y, p3->v.z }
+    };
+    GLfloat tc[3][2] = {
+        { p1->mx/255.f, p1->my/255.f },
+        { p2->mx/255.f, p2->my/255.f },
+        { p3->mx/255.f, p3->my/255.f }
+    };
+    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+    position = glGetAttribLocation(program, "position");
+    tex_coord = glGetAttribLocation(program, "tex_coord");
+    glVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, (void*)v[1] - (void*)v[0], v);
+    glVertexAttribPointer(tex_coord, 2, GL_FLOAT, GL_FALSE, (void*)tc[1] - (void*)tc[0], tc);
+    glEnableVertexAttribArray(position);
+    glEnableVertexAttribArray(tex_coord);
     glEnable(GL_TEXTURE_2D);
     glTexImage2D(
         GL_TEXTURE_2D, 0, GL_RGB, 256, 256, 0, GL_BGRA,
@@ -60,34 +80,48 @@ void polymap(struct vectorm *p1, struct vectorm *p2, struct vectorm *p3) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-    glBegin(GL_TRIANGLES);
-    glTexCoord2f(p1->mx/255.f, p1->my/255.f);
-    glVertex3f(p1->v.x, p1->v.y, p1->v.z);
-    glTexCoord2f(p2->mx/255.f, p2->my/255.f);
-    glVertex3f(p2->v.x, p2->v.y, p2->v.z);
-    glTexCoord2f(p3->mx/255.f, p3->my/255.f);
-    glVertex3f(p3->v.x, p3->v.y, p3->v.z);
-    glEnd();
+    glDrawArrays(GL_TRIANGLES, 0, 3);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(
             GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     glDisable(GL_TEXTURE_2D);
+    glDisableVertexAttribArray(position);
+    glDisableVertexAttribArray(tex_coord);
+    glVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(tex_coord, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 }
 
 void polyphong(struct vectorlum *p1, struct vectorlum *p2, struct vectorlum *p3, struct pixel coul) {
+    GLuint program;
+    GLint position, color, tex_coord;
+    GLfloat v[3][3] = {
+        { p1->v.x, p1->v.y, p1->v.z },
+        { p2->v.x, p2->v.y, p2->v.z },
+        { p3->v.x, p3->v.y, p3->v.z }
+    };
+    GLfloat tc[3][2] = {
+        { p1->xl/(float)(1<<(16-vf)), p1->yl/(float)(1<<(16-vf)) },
+        { p2->xl/(float)(1<<(16-vf)), p2->yl/(float)(1<<(16-vf)) },
+        { p3->xl/(float)(1<<(16-vf)), p3->yl/(float)(1<<(16-vf)) }
+    };
+    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+    position = glGetAttribLocation(program, "position");
+    color = glGetAttribLocation(program, "color");
+    tex_coord = glGetAttribLocation(program, "tex_coord");
     glBindTexture(GL_TEXTURE_2D, precatex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_ADD);
     glEnable(GL_TEXTURE_2D);
-    glColor3ub(coul.r, coul.g, coul.b);
-    glBegin(GL_TRIANGLES);
-    glTexCoord2d(p1->xl/(float)(1<<(16-vf)), p1->yl/(float)(1<<(16-vf)));
-    glVertex3f(p1->v.x, p1->v.y, p1->v.z);
-    glTexCoord2d(p2->xl/(float)(1<<(16-vf)), p2->yl/(float)(1<<(16-vf)));
-    glVertex3f(p2->v.x, p2->v.y, p2->v.z);
-    glTexCoord2d(p3->xl/(float)(1<<(16-vf)), p3->yl/(float)(1<<(16-vf)));
-    glVertex3f(p3->v.x, p3->v.y, p3->v.z);
-    glEnd();
+    glVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, (void*)v[1] - (void*)v[0], v);
+    glVertexAttribPointer(tex_coord, 2, GL_FLOAT, GL_FALSE, (void*)tc[1] - (void*)tc[0], tc);
+    glEnableVertexAttribArray(position);
+    glVertexAttrib4Nub(color, coul.r, coul.g, coul.b, 0xFF);
+    glEnableVertexAttribArray(tex_coord);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDisableVertexAttribArray(position);
+    glDisableVertexAttribArray(tex_coord);
+    glVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(tex_coord, 2, GL_FLOAT, GL_FALSE, 0, NULL);
     glDisable(GL_TEXTURE_2D);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     glBindTexture(GL_TEXTURE_2D, 0);

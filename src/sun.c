@@ -32,6 +32,7 @@ static struct pixel32 SunMap[SunMapX * (SunMapY+1)];
 static double SunPicPh[20], SunPicOmega[20];
 static int SunImgAdy[SunImgL*SunImgL];
 static struct pixel32 SunImgRGBA[SunImgL*SunImgL];
+static GLuint SunImgTex;
 
 static struct {
     float x, y, z, xy;
@@ -56,6 +57,10 @@ void initsol(void) {
         SunPicPh[i] = drand48()*2*M_PI;
         SunPicOmega[i] = drand48()*0.4 + 0.3;
     }
+    glGenTextures(1, &SunImgTex);
+    glBindTexture(GL_TEXTURE_2D, SunImgTex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     // The stars
     for (unsigned i = 0; i < ARRAY_LEN(stars); i++){
@@ -171,17 +176,26 @@ void affsoleil(struct vector *L) {
                         }
                     }
                 }
+                glBindTexture(GL_TEXTURE_2D, SunImgTex);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                glTexImage2D(
+                        GL_TEXTURE_2D, 0, GL_RGBA, SunImgL, SunImgL, 0,
+                        GL_BGRA, GL_UNSIGNED_BYTE, SunImgRGBA);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+                glEnable(GL_TEXTURE_2D);
                 glEnable(GL_BLEND);
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                glRasterPos2i(MAX(xse,0), MAX(yse,0));
-                glPixelStorei(GL_UNPACK_ROW_LENGTH, SunImgL);
-                glDrawPixels(
-                        SunImgL-MAX(-xse,0), SunImgL-MAX(-yse,0),
-                        GL_BGRA, GL_UNSIGNED_BYTE,
-                        SunImgRGBA+MAX(-yse,0)*SunImgL+MAX(-xse,0));
-                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+                glVertexAttrib4Nub(shader_color, 0xFF, 0xFF, 0xFF, 0xFF);
+
+                fill_rect(
+                        shader_position, xse, yse, xse+SunImgL, yse+SunImgL,
+                        shader_tex_coord, 0, 0, 1, 1,
+                        -1);
+
                 glBlendFunc(GL_ONE, GL_ZERO);
                 glDisable(GL_BLEND);
+                glDisable(GL_TEXTURE_2D);
+                glBindTexture(GL_TEXTURE_2D, 0);
             }
         }
     }

@@ -23,13 +23,51 @@
 #include "proto.h"
 #include "video_sdl.h"
 #include "sound.h"
-#include "SDL_opengl.h"
+//#include "SDL_opengles2.h"
+
+// The driver seems to need primitives not to be too far
+// off the screen, so we need to set gl_ClipDistance.
+static const char *vertex_shader_source[] = {
+    "#version 130\n"
+    "\n"
+    "attribute vec4 position;\n"
+    "attribute vec4 color;\n"
+    "attribute vec2 tex_coord;\n"
+    "\n"
+    "out float gl_ClipDistance[6];\n"
+    "\n"
+    "uniform vec2 tex_scale;\n"
+    "\n"
+    "void main() {\n"
+    "    gl_Position = gl_ModelViewProjectionMatrix * position;\n"
+    "    gl_FrontColor = color;\n"
+    "    gl_TexCoord[0] = vec4(tex_scale * tex_coord, 0, 1);\n"
+    "    gl_ClipDistance[0] = gl_Position.w - gl_Position.x;\n"
+    "    gl_ClipDistance[1] = gl_Position.w + gl_Position.x;\n"
+    "    gl_ClipDistance[2] = gl_Position.w - gl_Position.y;\n"
+    "    gl_ClipDistance[3] = gl_Position.w + gl_Position.y;\n"
+    "    gl_ClipDistance[4] = gl_Position.w - gl_Position.z;\n"
+    "    gl_ClipDistance[5] = gl_Position.w + gl_Position.z;\n"
+    "}\n"
+};
 
 static SDL_Window *window;
+
+GLint shader_position, shader_color, shader_tex_coord;
+GLint shader_tex_scale;
+
+static char *astrcat(const char *a, const char *b) {
+    char *res = malloc(strlen(a)+strlen(b)+1);
+    strcpy(res, a);
+    strcpy(res + strlen(a), b);
+    return res;
+}
 
 void initvideo(bool fullscreen)
 {
     int w, h;
+    GLuint vertex_shader, program;
+    GLint status;
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         fprintf(stderr,"Couln't initialize SDL: %s\n",SDL_GetError());
         exit(1);
@@ -43,7 +81,10 @@ void initvideo(bool fullscreen)
     SDL_GetWindowSize(window, &w, &h);
     printf("Set %dx%d mode\n",w,h);
     if (! SDL_GL_CreateContext(window)) {
-        fprintf(stderr,"Couldn't create an OpenGL context: %s\n",SDL_GetError());
+        char *msg =
+            astrcat("Couldn't create an OpenGL context: ",SDL_GetError());
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error",msg,window);
+        free(msg);
         exit(1);
     }
     glViewport(0, 0, win_width, win_height);
@@ -52,6 +93,60 @@ void initvideo(bool fullscreen)
     glMatrixMode(GL_PROJECTION);
     glOrtho(0, win_width, win_height, 0, -1, 1);
     glMatrixMode(GL_MODELVIEW);
+
+    vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+    if (vertex_shader == 0) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error","Couldn't create a vertex shader",window);
+        exit(1);
+    }
+    glShaderSource(vertex_shader, sizeof(vertex_shader_source) / sizeof(vertex_shader_source[0]), vertex_shader_source, NULL);
+    glCompileShader(vertex_shader);
+    glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &status);
+    if (!status) {
+        GLint len;
+        char *log, *msg;
+        glGetShaderiv(vertex_shader, GL_INFO_LOG_LENGTH, &len);
+        log = malloc(len+1);
+        glGetShaderInfoLog(vertex_shader, len+1, NULL, log);
+        msg = astrcat("Vertex shader compilation failed: ", log);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error",msg,window);
+        free(msg);
+        free(log);
+        exit(1);
+    }
+    program = glCreateProgram();
+    if (program == 0) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error","Couldn't create an OpenGL program",window);
+        exit(1);
+    }
+    glAttachShader(program, vertex_shader);
+    glLinkProgram(program);
+    glGetProgramiv(program, GL_LINK_STATUS, &status);
+    if (!status) {
+        GLint len;
+        char *log, *msg;
+        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &len);
+        log = malloc(len+1);
+        glGetProgramInfoLog(program, len+1, NULL, log);
+        msg = astrcat("OpenGL program linking failed: ", log);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error",msg,window);
+        free(msg);
+        free(log);
+        exit(1);
+    }
+    glUseProgram(program);
+    shader_position = glGetAttribLocation(program, "position");
+    shader_color = glGetAttribLocation(program, "color");
+    shader_tex_coord = glGetAttribLocation(program, "tex_coord");
+    shader_tex_scale = glGetUniformLocation(program, "tex_scale");
+    if (shader_position < 0 || shader_color < 0 || shader_tex_coord < 0 || shader_tex_scale < 0) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error","OpenGL program incorrect (unable to access vertex attributes or uniforms)",window);
+        exit(1);
+    }
+    glUniform2f(shader_tex_scale, 1, 1);
+    for (int i = 0; i < 6; i++) {
+        glEnable(GL_CLIP_DISTANCE0 + i);
+    }
 
     SDL_ShowCursor(0);
     SDL_EventState(SDL_WINDOWEVENT, SDL_ENABLE);

@@ -25,6 +25,7 @@
 #include <values.h>
 #include <assert.h>
 #include <stdbool.h>
+#define GL_GLEXT_PROTOTYPES
 #include "heightfield.h"
 #include "sound.h"
 #include "gtime.h"
@@ -110,6 +111,10 @@ static void background(void)
         {ciel,0,sol,-1},
         {cieldark,0,soldark,-1}
     };
+    GLuint program;
+    GLint position, color;
+    GLfloat v[10][2];
+    GLubyte c[10][3];
 
     // Compute position of the horizon (notice it's artificially lowered by 30 pixels)
     // z = z_near*rot.z.z - win_center_x*rot.x.z - win_center_y*rot.y.z + 30
@@ -126,25 +131,46 @@ static void background(void)
     glRotatef(180/M_PI*atan2f(obj[0].rot.x.z, -obj[0].rot.y.z), 0, 0, 1);
     float mag = hypotf(obj[0].rot.x.z, obj[0].rot.y.z);
     float z0 = z_near*obj[0].rot.z.z+30;
-    glColor3ub(
-            (coulfront[night_mode][0]>>16)&0xFF,
-            (coulfront[night_mode][0]>>8)&0xFF, coulfront[night_mode][0]&0xFF);
-    glRectf(-win_width, -win_width, win_width, (z0-zfront[0]/256.f)/mag);
-    glBegin(GL_QUADS);
-    glVertex2f(win_width, (z0-zfront[0]/256.f)/mag);
-    glVertex2f(-win_width, (z0-zfront[0]/256.f)/mag);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+    position = glGetAttribLocation(program, "position");
+    color = glGetAttribLocation(program, "color");
+    glVertexAttribPointer(position, 2, GL_FLOAT, GL_FALSE, 0, v);
+    glVertexAttribPointer(color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c);
+    glEnableVertexAttribArray(position);
+    glEnableVertexAttribArray(color);
+    v[0][0] = -win_width; v[0][1] = -win_width;
+    v[1][0] = win_width; v[1][1] = -win_width;
+    v[2][0] = -win_width; v[2][1] = (z0-zfront[0]/256.f)/mag;
+    v[3][0] = win_width; v[3][1] = (z0-zfront[0]/256.f)/mag;
+    c[0][0] = (coulfront[night_mode][0]>>16)&0xFF;
+    c[0][1] = (coulfront[night_mode][0]>>8)&0xFF;
+    c[0][2] = coulfront[night_mode][0]&0xFF;
+    memcpy(&c[1], &c[0], sizeof(c[0]));
+    memcpy(&c[2], &c[0], sizeof(c[0]));
+    memcpy(&c[3], &c[0], sizeof(c[0]));
+    v[4][0] = -win_width; v[4][1] = (z0-zfront[1]/256.f)/mag;
+    v[5][0] = win_width; v[5][1] = (z0-zfront[1]/256.f)/mag;
     if (!night_mode) {
-        glColor3ub(224, 224, 255);
+        c[4][0] = c[4][1] = 224; c[4][2] = 255;
     } else {
-        glColor3ub(0x20+64, 0x20+64, 0x40+64);
+        c[4][0] = c[4][1] = 0x20+64; c[4][2] = 0x40+64;
     }
-    glVertex2f(-win_width, (z0-zfront[1]/256.f)/mag);
-    glVertex2f(win_width, (z0-zfront[1]/256.f)/mag);
-    glEnd();
-    glColor3ub(
-            (coulfront[night_mode][2]>>16)&0xFF,
-            (coulfront[night_mode][2]>>8)&0xFF, coulfront[night_mode][2]&0xFF);
-    glRectf(-win_width, (z0-zfront[1]/256.f)/mag, win_width, win_width);
+    memcpy(&c[5], &c[4], sizeof(c[4]));
+    memcpy(&v[6], &v[4], sizeof(v[4]));
+    memcpy(&v[7], &v[5], sizeof(v[5]));
+    v[8][0] = -win_width; v[8][1] = win_width;
+    v[9][0] = win_width; v[9][1] = win_width;
+    c[6][0] = (coulfront[night_mode][2]>>16)&0xFF;
+    c[6][1] = (coulfront[night_mode][2]>>8)&0xFF;
+    c[6][2] = coulfront[night_mode][2]&0xFF;
+    memcpy(&c[7], &c[6], sizeof(c[6]));
+    memcpy(&c[8], &c[6], sizeof(c[6]));
+    memcpy(&c[9], &c[6], sizeof(c[6]));
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 10);
+    glDisableVertexAttribArray(position);
+    glDisableVertexAttribArray(color);
+    glVertexAttribPointer(position, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, NULL);
     glPopMatrix();
 }
 
@@ -929,8 +955,8 @@ parse_error:
                         u=(exp(-i-.9)-1)*2200;
                         glEnable(GL_BLEND);
                         glBlendFunc(GL_ONE, GL_ONE);
-                        glColor3ub(u, u, u);
-                        glRecti(0, 0, win_width, win_height);
+                        glVertexAttrib4Nub(shader_color, u, u, u, 0xFF);
+                        fill_rect(shader_position, 0, 0, win_width, win_height, -1);
                         glBlendFunc(GL_ONE, GL_ZERO);
                         glDisable(GL_BLEND);
                     }

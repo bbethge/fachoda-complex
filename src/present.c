@@ -22,6 +22,7 @@
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>
+#define GL_GLEXT_PROTOTYPES
 #include "proto.h"
 #include "keycodesdef.h"
 #include "sound.h"
@@ -29,8 +30,9 @@
 #include "video_sdl.h"
 #include "SDL_opengl.h"
 
-static struct pixel32 *presentimg;
+static GLuint presenttex;
 static int IMGX, IMGY;
+static GLubyte presentbg[3];
 
 static void jloadpresent(void) {
     struct jpeg_decompress_struct cinfo;
@@ -49,6 +51,7 @@ static void jloadpresent(void) {
     jpeg_start_decompress(&cinfo);
     IMGX=cinfo.output_width;
     IMGY=cinfo.output_height;
+    GLubyte (*presentimg)[3];
     if ((presentimg = malloc((IMGX+1)*(IMGY+1)*sizeof(*presentimg)))==NULL) {
         exit(-1);
     }
@@ -57,39 +60,52 @@ static void jloadpresent(void) {
         unsigned i;
         jpeg_read_scanlines(&cinfo, &imgtmp, 1);
         for (i=0; i<cinfo.output_width; i++) {
-            presentimg[(cinfo.output_scanline-1)*IMGX+i].r=imgtmp[i*3];
-            presentimg[(cinfo.output_scanline-1)*IMGX+i].g=imgtmp[i*3+1];
-            presentimg[(cinfo.output_scanline-1)*IMGX+i].b=imgtmp[i*3+2];
+            presentimg[(cinfo.output_scanline-1)*IMGX+i][0]=imgtmp[i*3];
+            presentimg[(cinfo.output_scanline-1)*IMGX+i][1]=imgtmp[i*3+1];
+            presentimg[(cinfo.output_scanline-1)*IMGX+i][2]=imgtmp[i*3+2];
         }
     }
     free(imgtmp);
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
     fclose(input_file);
+    memcpy(presentbg, presentimg+IMGX+1, sizeof(presentbg));
+    glGenTextures(1, &presenttex);
+    glBindTexture(GL_TEXTURE_2D, presenttex);
+    glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGB, IMGX, IMGY, 0, GL_RGB, GL_UNSIGNED_BYTE,
+            presentimg);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void affpresent(int dx,int dy)
 {
     int y;
-    int xb=((win_width-IMGX)>>1)+dx, yb=((win_height-IMGY)>>1)+dy, clipx1=0, clipx2=0;
-    if (xb+IMGX>win_width) clipx2=xb+IMGX-win_width;
-    if (xb<0) { clipx1=-xb; xb=0; }
+    int xb=((win_width-IMGX)>>1)+dx, yb=((win_height-IMGY)>>1)+dy;
     glClearColor(
             ((BACKCOLOR>>16)&0xFF)/255.0, ((BACKCOLOR>>8)&0xFF)/255.0,
             (BACKCOLOR&0xFF)/255.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
-    glRasterPos2i(xb, MAX(yb,0));
-    glDrawPixels(
-            IMGX-clipx1-clipx2, MIN(IMGY,win_height), GL_BGRA,
-            GL_UNSIGNED_INT_8_8_8_8_REV,
-            presentimg+MAX(0,-yb)*IMGX+clipx1);
+    glBindTexture(GL_TEXTURE_2D, presenttex);
+    glEnable(GL_TEXTURE_2D);
+    glVertexAttrib4Nub(shader_color, 0xFF, 0xFF, 0xFF, 0xFF);
+    fill_rect(
+            shader_position, xb, yb, xb+IMGX, yb+IMGY,
+            shader_tex_coord, 0, 0, 1, 1,
+            -1);
+    glDisable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 static void affpresentanim(int d)
 {
     int y;
-    int xb=(win_width-IMGX)>>1, yb=(win_height-IMGY)>>1, clipx=0;
-    if (xb<0) { clipx=-xb; xb=0; }
+    int xb=(win_width-IMGX)>>1, yb=(win_height-IMGY)>>1;
+    glBindTexture(GL_TEXTURE_2D, presenttex);
+    glEnable(GL_TEXTURE_2D);
+    glUniform2f(shader_tex_scale, 1./IMGX, 1./IMGY);
+    glVertexAttrib4Nub(shader_color, 0xFF, 0xFF, 0xFF, 0xFF);
     for (y=0; y<IMGY; y++) {
         int yd;
         if (y&1) {
@@ -99,11 +115,14 @@ static void affpresentanim(int d)
             yd=y-d*drand48();
             if (yd<1) yd=1;
         }
-        glRasterPos2i(xb, y+yb);
-        glDrawPixels(
-                IMGX-2*clipx, 1, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
-                presentimg+yd*IMGX+clipx);
+        fill_rect(
+                shader_position, xb, y+yb, xb+IMGX, y+yb+1,
+                shader_tex_coord, 0, yd, IMGX, yd+1,
+                -1);
     }
+    glUniform2f(shader_tex_scale, 1, 1);
+    glDisable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void animpresent(void)
@@ -114,8 +133,7 @@ void animpresent(void)
     TextClipX2=(win_width-IMGX)/2+250;
     TextColfont=0xD0D0D0;
     jloadpresent();
-    p = presentimg+IMGX+1;
-    glClearColor(p->r/255., p->g/255., p->b/255., 1.);
+    glClearColor(presentbg[0]/255., presentbg[1]/255., presentbg[2]/255., 1.);
     playsound(VOICE_EXTER, SAMPLE_PRESENT, 1., &voices_in_my_head, true, false);
     while (d) {
         glClear(GL_COLOR_BUFFER_BIT);

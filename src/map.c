@@ -31,7 +31,7 @@ struct vector mark[NB_MARKS];
 
 static void plotchar(int x, int y, int c, unsigned char m)
 {
-    pcharlent(m+16,x-3,y-SizeCharY/2,c);
+    pchar(m+16,x-3,y-SizeCharY/2,c);
 }
 
 static void draw_fg(void)
@@ -47,7 +47,7 @@ static void draw_fg(void)
     for (o=0; o<NB_VILLAGES; o++) {
         int x,y;
         plotchar(x=win_center_x+(village[o].p.x-TILE_LEN*map_x)*zoom/(TILE_LEN*MAP_LEN/2),y=win_center_y-(village[o].p.y-TILE_LEN*map_y)*zoom/(TILE_LEN*MAP_LEN/2),0xFFFFFF,11);
-        pwordlent(village[o].nom,x-3*strlen(village[o].nom),y+9,0xFFFFFF);
+        pword(village[o].nom,x-3*strlen(village[o].nom),y+9,0xFFFFFF);
     }
     for (o=0; o<NBTANKBOTS; o++) {
         if (tank[o].camp!=-1 && (enable_view_enemy||tank[o].camp==bot[controlled_bot].camp)) plotchar(win_center_x+(obj[tank[o].o1].pos.x-TILE_LEN*map_x)*zoom/(TILE_LEN*MAP_LEN/2),win_center_y-(obj[tank[o].o1].pos.y-TILE_LEN*map_y)*zoom/(TILE_LEN*MAP_LEN/2),c[(int)tank[o].camp],14);

@@ -22,6 +22,7 @@
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>
+#define GL_GLEXT_PROTOTYPES
 #include "keycodesdef.h"
 #include "proto.h"
 #include "sound.h"
@@ -170,12 +171,19 @@ static struct {
 
 void disqueintro(int x, int y, int r, int c) {
     int i, n = 4+r/2;
-    glColor3ub((c>>16)&0xFF, (c>>8)&0xFF, c&0xFF);
-    glBegin(GL_TRIANGLE_FAN);
+    GLfloat *v;
+    v = malloc(2*n*sizeof(GLfloat));
     for (i=0; i<n; i++) {
-        glVertex2f(x+r*cosf(2*M_PI*i/n), y+r*sinf(2*M_PI*i/n));
+        v[2*i] = x+r*cosf(2*M_PI*i/n);
+        v[2*i+1] = y+r*sinf(2*M_PI*i/n);
     }
-    glEnd();
+    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(shader_position);
+    glVertexAttrib4Nub(shader_color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, n);
+    glDisableVertexAttribArray(shader_position);
+    glVertexAttribPointer(shader_position, 4, GL_FLOAT, GL_FALSE, 0, NULL);
+    free(v);
 }
 #define RAYONBOUTTON 40
 void button(int x, int y, char *label,char highlight) {
@@ -230,10 +238,12 @@ static int jauge(int vi, int max) {
         kzc = kazeclick(xmouse,ymouse,14);
         draw_page(14, .45 + .2*sin(phaz*.61), .5*M_PI + .2*sin(phaz));
         phaz += 2.1*dt_sec;
-        glColor3ub(0x30, 0x60, 0xA0);
-        glRecti(
-                10, win_height/3-(win_height>>3),
-                10+jx, win_height/3+(win_height>>3));
+        glVertexAttrib4Nub(shader_color, 0x30, 0x60, 0xA0, 0xFF);
+        fill_rect(
+            shader_position,
+            10,    win_height/3-(win_height>>3),
+            10+jx, win_height/3+(win_height>>3),
+            -1);
         pbignum(va,win_center_x,win_height/3-SizeBigCharY/2,2,1,0);
         plot_cursor(xmouse,ymouse);
         buffer2video();

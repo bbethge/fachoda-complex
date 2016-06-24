@@ -191,15 +191,18 @@ void affjauge(float j)
     static float jauge=0;
     float nj=jauge+j;
     static int x=10;
-    int nx,y,xx;
+    int nx;
     nx=10+(int)(nj*(win_width-20.));
     if (nx>x) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_ONE, GL_ONE);
-        glColor3ub(0, 0x10, 0x80);
-        glRecti(
-                x, win_center_y-(win_height>>3),
-                nx, win_center_y+(win_height>>3));
+        glVertexAttrib4Nub(shader_color, 0, 0x10, 0x80, 0xFF);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        fill_rect(
+            shader_position,
+            x,  win_center_y-(win_height>>3),
+            nx, win_center_y+(win_height>>3),
+            -1);
         glBlendFunc(GL_ONE, GL_ZERO);
         glDisable(GL_BLEND);
         buffer2video();

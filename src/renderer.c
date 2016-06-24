@@ -16,12 +16,14 @@
  * You should have received a copy of the GNU General Public License
  * along with Fachoda.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <math.h>
 #include <values.h>
 #include <assert.h>
+#define GL_GLEXT_PROTOTYPES
 #include "video_sdl.h"
 #include "heightfield.h"
 #include "SDL_opengl.h"
@@ -35,18 +37,24 @@ void initrender() {
 }
 void plot(int x, int y, int r)
 {
-    glColor3ub((r>>16)&0xFF, (r>>8)&0xFF, r&0xFF);
-    glBegin(GL_POINTS);
-    glVertex2i(x+win_center_x, y+win_center_y);
-    glEnd();
+    GLint v[2] = { x+win_center_x, y+win_center_y };
+    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(shader_position);
+    glVertexAttrib4Nub(shader_color, (r>>16)&0xFF, (r>>8)&0xFF, r&0xFF, 0xFF);
+    glDrawArrays(GL_POINTS, 0, 1);
+    glDisableVertexAttribArray(shader_position);
+    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, NULL);
 }
 
 // Draw a pixel at 50% opacity
 void mixplot(int x, int y, int r, int g, int b){
-    glColor4ub(r, g, b, 0x7F);
-    glBegin(GL_POINTS);
-    glVertex2i(x+win_center_x, y+win_center_y);
-    glEnd();
+    GLint v[2] = { x+win_center_x, y+win_center_y };
+    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(shader_position);
+    glVertexAttrib4Nub(shader_color, r, g, b, 0x7F);
+    glDrawArrays(GL_POINTS, 0, 1);
+    glDisableVertexAttribArray(shader_position);
+    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, NULL);
 }
 // Draw a small white crosshair
 void plot_stick(int x,int y){
@@ -99,35 +107,49 @@ void plot_cursor(int x,int y) {
     a+=.31; ar+=.2;
 }
 // Draw a circle (unfilled)
+#define CERCLE_MAX_SIDES 180
 void cercle(int x, int y, int radius, int c) {
-    int i, n = 4+radius/2;
-    glColor3ub((c>>16)&0xFF, (c>>8)&0xFF, c&0xFF);
-    glBegin(GL_LINE_STRIP);
-    for (i=0; i<=n; i++) {
-        glVertex2d(
-                x+win_center_x+radius*cos(2*M_PI*i/n),
-                y+win_center_y+radius*sin(2*M_PI*i/n));
+    int i, n = MIN(4+radius/2, CERCLE_MAX_SIDES);
+    GLfloat v[CERCLE_MAX_SIDES][2];
+    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(shader_position);
+    glVertexAttrib4Nub(shader_color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
+    for (i=0; i<n; i++) {
+        v[i][0] = x+win_center_x+radius*cos(2*M_PI*i/n);
+        v[i][1] = y+win_center_y+radius*sin(2*M_PI*i/n);
     }
-    glEnd();
+    glDrawArrays(GL_LINE_LOOP, 0, n);
+    glDisableVertexAttribArray(shader_position);
+    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 }
 
 extern inline int color_of_pixel(struct pixel c);
 extern inline struct pixel32 pixel32_of_pixel(struct pixel c);
 
 void polyflat(struct vector *p1, struct vector *p2, struct vector *p3, struct pixel coul) {
-    glColor3ub(coul.r, coul.g, coul.b);
-    glBegin(GL_TRIANGLES);
-    glVertex3f(p1->x, p1->y, p1->z);
-    glVertex3f(p2->x, p2->y, p2->z);
-    glVertex3f(p3->x, p3->y, p3->z);
-    glEnd();
+    GLfloat v[9] = {
+        p1->x, p1->y, p1->z,
+        p2->x, p2->y, p2->z,
+        p3->x, p3->y, p3->z
+    };
+    glVertexAttribPointer(shader_position, 3, GL_FLOAT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(shader_position);
+    glVertexAttrib4Nub(shader_color, coul.r, coul.g, coul.b, 0xFF);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDisableVertexAttribArray(shader_position);
+    glVertexAttribPointer(shader_position, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 }
-void drawline(struct vect2d const *restrict p1, struct vect2d const *restrict p2, int col) {
-    glColor3ub((col>>16)&0xFF, (col>>8)&0xFF, col&0xFF);
-    glBegin(GL_LINES);
-    glVertex2i(p1->x, p1->y);
-    glVertex2i(p2->x, p2->y);
-    glEnd();
+void drawline(struct vect2d const *p1, struct vect2d const *p2, int col) {
+    GLint v[4] = {
+        p1->x, p1->y,
+        p2->x, p2->y
+    };
+    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(shader_position);
+    glVertexAttrib4Nub(shader_color, (col>>16)&0xFF, (col>>8)&0xFF, col&0xFF, 0xFF);
+    glDrawArrays(GL_LINES, 0, 2);
+    glDisableVertexAttribArray(shader_position);
+    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, NULL);
 }
 
 void draw_rectangle(struct vect2d const *restrict min, struct vect2d const *restrict max, int col)
@@ -138,6 +160,51 @@ void draw_rectangle(struct vect2d const *restrict min, struct vect2d const *rest
     drawline(min, &p2, col);
     drawline(max, &p1, col);
     drawline(max, &p2, col);
+}
+
+void fill_rect(GLint attrib1, ...)
+{
+    va_list ap;
+    GLint attrib = attrib1;
+    va_start(ap, attrib1);
+    int nb_attrib = 0;
+    while (attrib >= 0) {
+        va_arg(ap, int); va_arg(ap, int); va_arg(ap, int); va_arg(ap, int);
+        nb_attrib++;
+        attrib = va_arg(ap, GLint);
+    }
+    va_end(ap);
+
+    GLint *verts = malloc(2*4*nb_attrib*sizeof(GLint));
+    attrib = attrib1;
+    va_start(ap, attrib1);
+    for (int i = 0; i < nb_attrib; i++) {
+        int minx = va_arg(ap, int);
+        int miny = va_arg(ap, int);
+        int maxx = va_arg(ap, int);
+        int maxy = va_arg(ap, int);
+        memcpy(
+            verts + 2*4*i,
+            (GLint[]) { minx, miny, maxx, miny, minx, maxy, maxx, maxy },
+            2*4*sizeof(GLint)
+        );
+        glVertexAttribPointer(attrib, 2, GL_INT, GL_FALSE, 0, verts + 2*4*i);
+        glEnableVertexAttribArray(attrib);
+        attrib = va_arg(ap, GLint);
+    }
+    va_end(ap);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    attrib = attrib1;
+    va_start(ap, attrib1);
+    for (int i = 0; i < nb_attrib; i++) {
+        va_arg(ap, int); va_arg(ap, int); va_arg(ap, int); va_arg(ap, int);
+        glVertexAttribPointer(attrib, 2, GL_INT, GL_FALSE, 0, NULL);
+        glDisableVertexAttribArray(attrib);
+        attrib = va_arg(ap, GLint);
+    }
+    va_end(ap);
+    free(verts);
 }
 
 void drawline2(struct vect2d *p1, struct vect2d *p2, int col) {
@@ -242,57 +309,81 @@ void calcposa(void)
 // FIXME: currently just draws a simple yellow glow.
 void plotphare(int x, int y, int r) {
     int i, n=MAX(4+r/4,180);
+    GLfloat v[182][2];
+    GLubyte c[182][3];
+    v[0][0] = x; v[0][1] = y;
+    c[0][0] = c[0][1] = 190; c[0][2] = 0;
+    for (i=0; i<=n; i++) {
+        v[1+i][0] = x+r*cosf(2*M_PI*i/n); v[1+i][1] = y+r*sinf(2*M_PI*i/n);
+        c[1+i][0] = c[1+i][1] = c[1+i][2] = 0;
+    }
+    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, (GLubyte*)v[1] - (GLubyte*)v[0], v);
+    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, (GLubyte*)c[1] - (GLubyte*)c[0], c);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    glBegin(GL_TRIANGLE_FAN);
-    glColor3ub(190, 190, 0);
-    glVertex2f(x, y);
-    glColor3ub(0, 0, 0);
-    for (i=0; i<=n; i++) {
-        glVertex2f(x+r*cosf(2*M_PI*i/n), y+r*sinf(2*M_PI*i/n));
-    }
-    glEnd();
+    glEnableVertexAttribArray(shader_position);
+    glEnableVertexAttribArray(shader_color);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 2+n);
+    glDisableVertexAttribArray(shader_position);
+    glDisableVertexAttribArray(shader_color);
     glBlendFunc(GL_ONE, GL_ONE);
     glDisable(GL_BLEND);
+    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_FALSE, 0, NULL);
+}
+
+// Draw grey with value inten*sqrt(r**2-(xx-x)**2-(yy-y)**2)
+// within the disk (xx-x)**2+(yy-y)**2 < r**2.
+static void plotblob(int x, int y, int r, int inten) {
+    int n_rad=MIN(1+r/4,256), n_circ=MIN(4+r/2,180);
+    GLfloat *v;
+    GLubyte *c;
+    int i_rad, i_circ;
+    GLubyte lum_i, lum_o;
+    v = malloc(255*181*2*2*sizeof(v[0]));
+    c = malloc(255*181*2*3*sizeof(c[0]));
+    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, v);
+    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c);
+    glEnableVertexAttribArray(shader_position);
+    glEnableVertexAttribArray(shader_color);
+    v[0] = x; v[1] = y;
+    c[0] = c[1] = c[2] = inten;
+    lum_o = inten*sqrtf(1-1.f/(n_rad*n_rad));
+    for (i_circ = 0; i_circ <= n_circ; i_circ++) {
+        v[(1+i_circ)*2] = x+r/(float)n_rad*cosf(2*M_PI*i_circ/n_circ);
+        v[(1+i_circ)*2+1] = y+r/(float)n_rad*sinf(2*M_PI*i_circ/n_circ);
+        c[(1+i_circ)*3] = c[(1+i_circ)*3+1] = c[(1+i_circ)*3+2] = lum_o;
+    }
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 2+n_circ);
+    for (i_rad = 2; i_rad <= n_rad; i_rad++) {
+        lum_i = lum_o;
+        lum_o = inten*sqrtf(1-((float)i_rad/n_rad)*((float)i_rad/n_rad));
+        for (i_circ = 0; i_circ <= n_circ; i_circ++) {
+            int i = ((n_circ+1)*(i_rad-2) + i_circ)*2;
+            v[i*2] = x+r*(float)(i_rad-1)/n_rad*cosf(2*M_PI*i_circ/n_circ);
+            v[i*2+1] = y+r*(float)(i_rad-1)/n_rad*sinf(2*M_PI*i_circ/n_circ);
+            c[i*3] = c[i*3+1] = c[i*3+2] = lum_i;
+            v[(i+1)*2] = x+r*(float)i_rad/n_rad*cosf(2*M_PI*i_circ/n_circ);
+            v[(i+1)*2+1] = y+r*(float)i_rad/n_rad*sinf(2*M_PI*i_circ/n_circ);
+            c[(i+1)*3] = c[(i+1)*3+1] = c[(i+1)*3+2] = lum_o;
+        }
+    }
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 2*(n_circ+1)*(n_rad-1));
+    glDisableVertexAttribArray(shader_position);
+    glDisableVertexAttribArray(shader_color);
+    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, NULL);
+    free(v);
+    free(c);
 }
 
 // Lighten the pixels in the videobuffer within the disk
 // (xx-x)**2+(yy-y)**2 < r**2 by
 // 90*sqrt(r**2-(xx-x)**2-(yy-y)**2)/r.
-#define NUAGE_LUM 90
 void plotnuage(int x, int y, int r) {
-    int n_rad=MIN(1+r/4,256), n_circ=MIN(4+r/2,180);
-    int i_rad, i_circ;
-    GLubyte lum_i, lum_o;
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    glBegin(GL_TRIANGLE_FAN);
-    glColor3ub(NUAGE_LUM, NUAGE_LUM, NUAGE_LUM);
-    glVertex2i(x, y);
-    lum_o = NUAGE_LUM*sqrtf(1-1.f/(n_rad*n_rad));
-    glColor3ub(lum_o, lum_o, lum_o);
-    for (i_circ = 0; i_circ <= n_circ; i_circ++) {
-        glVertex2f(
-                x+r/(float)n_rad*cosf(2*M_PI*i_circ/n_circ),
-                y+r/(float)n_rad*sinf(2*M_PI*i_circ/n_circ));
-    }
-    glEnd();
-    glBegin(GL_QUAD_STRIP);
-    for (i_rad = 2; i_rad <= n_rad; i_rad++) {
-        lum_i = lum_o;
-        lum_o = NUAGE_LUM*sqrtf(1-((float)i_rad/n_rad)*((float)i_rad/n_rad));
-        for (i_circ = 0; i_circ <= n_circ; i_circ++) {
-            glColor3ub(lum_i, lum_i, lum_i);
-            glVertex2f(
-                    x+r*(float)(i_rad-1)/n_rad*cosf(2*M_PI*i_circ/n_circ),
-                    y+r*(float)(i_rad-1)/n_rad*sinf(2*M_PI*i_circ/n_circ));
-            glColor3ub(lum_o, lum_o, lum_o);
-            glVertex2f(
-                    x+r*(float)i_rad/n_rad*cosf(2*M_PI*i_circ/n_circ),
-                    y+r*(float)i_rad/n_rad*sinf(2*M_PI*i_circ/n_circ));
-        }
-    }
-    glEnd();
+    plotblob(x, y, r, 90);
     glBlendFunc(GL_ONE, GL_ZERO);
     glDisable(GL_BLEND);
 }
@@ -300,41 +391,11 @@ void plotnuage(int x, int y, int r) {
 // Darken the pixels in the videobuffer within the disk
 // (xx-x)**2+(yy-y)**2 < r**2 by
 // 40*sqrt(r**2-(xx-x)**2-(yy-y)**2)/r.
-#define FUMEE_LUM 40
 void plotfumee(int x, int y, int r) {
-    int n_rad=MIN(1+r/4,256), n_circ=MIN(4+r/2,180);
-    int i_rad, i_circ;
-    GLubyte lum_i, lum_o;
     glEnable(GL_BLEND);
     glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
     glBlendFunc(GL_ONE, GL_ONE);
-    glBegin(GL_TRIANGLE_FAN);
-    glColor3ub(FUMEE_LUM, FUMEE_LUM, FUMEE_LUM);
-    glVertex2i(x, y);
-    lum_o = FUMEE_LUM*sqrtf(1-1.f/(n_rad*n_rad));
-    glColor3ub(lum_o, lum_o, lum_o);
-    for (i_circ = 0; i_circ <= n_circ; i_circ++) {
-        glVertex2f(
-                x+r/(float)n_rad*cosf(2*M_PI*i_circ/n_circ),
-                y+r/(float)n_rad*sinf(2*M_PI*i_circ/n_circ));
-    }
-    glEnd();
-    glBegin(GL_QUAD_STRIP);
-    for (i_rad = 2; i_rad <= n_rad; i_rad++) {
-        lum_i = lum_o;
-        lum_o = FUMEE_LUM*sqrtf(1-((float)i_rad/n_rad)*((float)i_rad/n_rad));
-        for (i_circ = 0; i_circ <= n_circ; i_circ++) {
-            glColor3ub(lum_i, lum_i, lum_i);
-            glVertex2f(
-                    x+r*(float)(i_rad-1)/n_rad*cosf(2*M_PI*i_circ/n_circ),
-                    y+r*(float)(i_rad-1)/n_rad*sinf(2*M_PI*i_circ/n_circ));
-            glColor3ub(lum_o, lum_o, lum_o);
-            glVertex2f(
-                    x+r*(float)i_rad/n_rad*cosf(2*M_PI*i_circ/n_circ),
-                    y+r*(float)i_rad/n_rad*sinf(2*M_PI*i_circ/n_circ));
-        }
-    }
-    glEnd();
+    plotblob(x, y, r, 40);
     glBlendFunc(GL_ONE, GL_ZERO);
     glBlendEquation(GL_FUNC_ADD);
     glDisable(GL_BLEND);
@@ -435,11 +496,16 @@ static void render_obj(int o, int no)
             0,      0,      0,      1});
     if (obj[o].type==TYPE_SHOT) {
         struct vector *pt = mod[obj[o].model].pts[mo];
-        glColor3ub(0xFF, 0xA0, 0xF0);
-        glBegin(GL_LINES);
-        glVertex3f(pt[0].x, pt[0].y, pt[0].z);
-        glVertex3f(pt[1].x, pt[1].y, pt[1].z);
-        glEnd();
+        GLfloat v[6] = {
+            pt[0].x, pt[0].y, pt[0].z,
+            pt[1].x, pt[1].y, pt[1].z
+        };
+        glVertexAttribPointer(shader_position, 3, GL_FLOAT, GL_FALSE, 0, v);
+        glEnableVertexAttribArray(shader_position);
+        glVertexAttrib4Nub(shader_color, 0xFF, 0xA0, 0xF0, 0xFF);
+        glDrawArrays(GL_LINES, 0, 2);
+        glDisableVertexAttribArray(shader_position);
+        glVertexAttribPointer(shader_position, 3, GL_FLOAT, GL_FALSE, 0, NULL);
     } else {
         for (int p=0; p<mod[obj[o].model].nbfaces[mo]; p++) {
             if (mod[obj[o].model].fac[mo][p].norm.x != 0 ||

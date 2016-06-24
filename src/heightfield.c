@@ -384,6 +384,8 @@ void polyclip(struct vecic const *p1, struct vecic const *p2, struct vecic const
 
 static void dot(struct vecic const *p)
 {
+    GLint v[2];
+
     if (p->v.z <= FRUSTUM_ZMIN) return;
 
     struct vect2d l;
@@ -391,10 +393,13 @@ static void dot(struct vecic const *p)
 
     if (l.x < 0 || l.x >= win_width || l.y < 0 || l.y >= win_height) return;
 
-    glColor3ub(p->c.r, p->c.g, p->c.b);
-    glBegin(GL_POINTS);
-    glVertex2i(l.x, l.y);
-    glEnd();
+    v[0] = l.x; v[1] = l.y;
+    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(shader_position);
+    glVertexAttrib4Nub(shader_color, p->c.r, p->c.g, p->c.b, 0xFF);
+    glDrawArrays(GL_POINTS, 0, 1);
+    glDisableVertexAttribArray(shader_position);
+    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, NULL);
 }
 
 // This restartable random generator is used to locate dots on the poly.
@@ -841,6 +846,16 @@ void draw_ground_and_objects(void)
 bool poly_gouraud(struct vect2dc *p1, struct vect2dc *p2, struct vect2dc *p3)
 {
     struct vect2dc *tmp, *p_maxx, *p_minx;
+    GLint v[3][2] = {
+        { p1->v.x, p1->v.y },
+        { p2->v.x, p2->v.y },
+        { p3->v.x, p3->v.y }
+    };
+    GLubyte c[3][3] = {
+        { p1->c.r, p1->c.g, p1->c.b },
+        { p2->c.r, p2->c.g, p2->c.b },
+        { p3->c.r, p3->c.g, p3->c.b }
+    };
     // order points in ascending Y
     if (p2->v.y<p1->v.y) { tmp=p1; p1=p2; p2=tmp; }
     if (p3->v.y<p1->v.y) { tmp=p1; p1=p3; p3=tmp; }
@@ -854,14 +869,15 @@ bool poly_gouraud(struct vect2dc *p1, struct vect2dc *p2, struct vect2dc *p3)
     if (p2->v.x<p_minx->v.x) p_minx=p2;
     if (p3->v.x<p_minx->v.x) p_minx=p3;
     if (p_minx->v.x>win_width) return false;
-    glBegin(GL_TRIANGLES);
-    glColor3ub(p1->c.r, p1->c.g, p1->c.b);
-    glVertex2i(p1->v.x, p1->v.y);
-    glColor3ub(p2->c.r, p2->c.g, p2->c.b);
-    glVertex2i(p2->v.x, p2->v.y);
-    glColor3ub(p3->c.r, p3->c.g, p3->c.b);
-    glVertex2i(p3->v.x, p3->v.y);
-    glEnd();
+    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, (void*)v[1] - (void*)v[0], v);
+    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, (void*)c[1] - (void*)c[0], c);
+    glEnableVertexAttribArray(shader_position);
+    glEnableVertexAttribArray(shader_color);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDisableVertexAttribArray(shader_position);
+    glDisableVertexAttribArray(shader_color);
+    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, NULL);
     return true;
 }
 

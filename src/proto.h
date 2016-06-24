@@ -433,6 +433,12 @@ void draw_mark(struct vector, int c);
 void polyflat(struct vector *p1, struct vector *p2, struct vector *p3, struct pixel color);
 void drawline(struct vect2d const *restrict p1, struct vect2d const *restrict p2, int col);
 void draw_rectangle(struct vect2d const *restrict min, struct vect2d const *restrict max, int col);
+// fill_rect(
+//     GLint attrib_a, int min_ax, int min_ay, int max_ax, int max_ay,
+//     GLint attrib_b, int min_bx, int min_by, int max_bx, int max_by,
+//     ...,
+//     -1)
+void fill_rect(int attrib1, ...);
 void drawline2(struct vect2d *p1, struct vect2d *p2, int col);
 void calcposaind(int i);
 void calcposa(void);
@@ -461,9 +467,7 @@ void pbignumchar(int n, int x, int y, int c);
 void pbignum(int n, int x, int y, int just, char tot, char dolard);
 void loadfont(char *fn, int nx, int ny, int cy);
 void pchar(int m, int x, int y, int c);
-void pcharlent(int m, int x, int y, int c);
 void pword(char const *m, int x, int y, int c);
-void pwordlent(char const *m, int x, int y, int c);
 void pstr(char const *m, int y, int c);
 void pstrlent(char const *m, int y, int c);
 // model.c
