@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <values.h>
+#define GL_GLEXT_PROTOTYPES
 #include "video_sdl.h"
 #include "heightfield.h"
 #include "SDL_opengl.h"
@@ -382,26 +383,6 @@ void polyclip(struct vecic const *p1, struct vecic const *p2, struct vecic const
     }
 }
 
-static void dot(struct vecic const *p)
-{
-    GLint v[2];
-
-    if (p->v.z <= FRUSTUM_ZMIN) return;
-
-    struct vect2d l;
-    proji(&l, &p->v);
-
-    if (l.x < 0 || l.x >= win_width || l.y < 0 || l.y >= win_height) return;
-
-    v[0] = l.x; v[1] = l.y;
-    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, v);
-    glEnableVertexAttribArray(shader_position);
-    glVertexAttrib4Nub(shader_color, p->c.r, p->c.g, p->c.b, 0xFF);
-    glDrawArrays(GL_POINTS, 0, 1);
-    glDisableVertexAttribArray(shader_position);
-    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, NULL);
-}
-
 // This restartable random generator is used to locate dots on the poly.
 static void next_rand(uint32_t *prev1, uint32_t *prev2)
 {
@@ -414,6 +395,8 @@ static void polydots(struct vecic const *p1, struct vecic const *p2, struct veci
 {
 #   define DIST_DOTS (10000 * ONE_METER)
 #   define NB_DOTS_PER_POLY 20
+    GLfloat v[NB_DOTS_PER_POLY*3];
+    GLubyte c[NB_DOTS_PER_POLY*3];
 
     int const dist = normei_approx(&p1->v);
     if (dist >= DIST_DOTS) return;
@@ -422,6 +405,7 @@ static void polydots(struct vecic const *p1, struct vecic const *p2, struct veci
     uint32_t rand1 = 0x12345678 * seed, rand2 = 0x87654321 * seed;
     unsigned const nb_dots = (NB_DOTS_PER_POLY * (DIST_DOTS - dist))/DIST_DOTS;
     int const visibility = ((DIST_DOTS - dist) << 8) / DIST_DOTS;
+    unsigned n = 0;
     for (unsigned d = 0; d < nb_dots; d++) {
         next_rand(&rand1, &rand2);
         int const x = rand1 & 0xffff;
@@ -442,11 +426,30 @@ static void polydots(struct vecic const *p1, struct vecic const *p2, struct veci
         addvi(&p.v, &dx);
         addvi(&p.v, &dy);
         int const dc = (((x&0xff)-128) * visibility) >> 8;
-        p.c.r = add_sat(p1->c.r, dc, 255);
-        p.c.g = add_sat(p2->c.g, dc, 255);
-        p.c.b = add_sat(p3->c.b, dc, 255);
-        dot(&p);
+        v[3*n] = p.v.x; v[3*n+1] = p.v.y; v[3*n+2] = p.v.z;
+        c[3*n]   = add_sat(p1->c.r, dc, 255);
+        c[3*n+1] = add_sat(p2->c.g, dc, 255);
+        c[3*n+2] = add_sat(p3->c.b, dc, 255);
+        n++;
     }
+    glVertexAttribPointer(shader_position, 3, GL_FLOAT, GL_FALSE, 0, v);
+    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c);
+    glEnableVertexAttribArray(shader_position);
+    glEnableVertexAttribArray(shader_color);
+    glPushMatrix();
+    glScalef(1, 1, -1);
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glFrustum(
+            -win_center_x, win_center_x, win_center_y, -win_center_y,
+            z_near, DIST_DOTS);
+    glDrawArrays(GL_POINTS, 0, n);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+    glPopMatrix();
+    glDisableVertexAttribArray(shader_position);
+    glDisableVertexAttribArray(shader_color);
 }
 
 /* We will draw the world using the painter method.
