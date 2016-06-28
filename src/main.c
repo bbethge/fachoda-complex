@@ -131,13 +131,12 @@ static void background(void)
     glRotatef(180/M_PI*atan2f(obj[0].rot.x.z, -obj[0].rot.y.z), 0, 0, 1);
     float mag = hypotf(obj[0].rot.x.z, obj[0].rot.y.z);
     float z0 = z_near*obj[0].rot.z.z+30;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    position = glGetAttribLocation(program, "position");
-    color = glGetAttribLocation(program, "color");
-    glVertexAttribPointer(position, 2, GL_FLOAT, GL_FALSE, 0, v);
-    glVertexAttribPointer(color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c);
-    glEnableVertexAttribArray(position);
-    glEnableVertexAttribArray(color);
+    glVertexAttribPointer(default_shader.position, 2, GL_FLOAT, GL_FALSE, 0, v);
+    glVertexAttribPointer(
+        default_shader.color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c
+    );
+    glEnableVertexAttribArray(default_shader.position);
+    glEnableVertexAttribArray(default_shader.color);
     v[0][0] = -win_width; v[0][1] = -win_width;
     v[1][0] = win_width; v[1][1] = -win_width;
     v[2][0] = -win_width; v[2][1] = (z0-zfront[0]/256.f)/mag;
@@ -167,11 +166,10 @@ static void background(void)
     memcpy(&c[8], &c[6], sizeof(c[6]));
     memcpy(&c[9], &c[6], sizeof(c[6]));
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 10);
-    glDisableVertexAttribArray(position);
-    glDisableVertexAttribArray(color);
-    glVertexAttribPointer(position, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    glVertexAttribPointer(color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, NULL);
+    glDisableVertexAttribArray(default_shader.position);
+    glDisableVertexAttribArray(default_shader.color);
     glPopMatrix();
+    assert(glGetError() == GL_NO_ERROR);
 }
 
 int viewed_bot = 0, viewed_obj = 0;
@@ -955,8 +953,8 @@ parse_error:
                         u=(exp(-i-.9)-1)*2200;
                         glEnable(GL_BLEND);
                         glBlendFunc(GL_ONE, GL_ONE);
-                        glVertexAttrib4Nub(shader_color, u, u, u, 0xFF);
-                        fill_rect(shader_position, 0, 0, win_width, win_height, -1);
+                        glVertexAttrib4Nub(default_shader.color, u, u, u, 0xFF);
+                        fill_rect(default_shader.position, 0, 0, win_width, win_height, -1);
                         glBlendFunc(GL_ONE, GL_ZERO);
                         glDisable(GL_BLEND);
                     }

@@ -177,12 +177,12 @@ void disqueintro(int x, int y, int r, int c) {
         v[2*i] = x+r*cosf(2*M_PI*i/n);
         v[2*i+1] = y+r*sinf(2*M_PI*i/n);
     }
-    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, v);
-    glEnableVertexAttribArray(shader_position);
-    glVertexAttrib4Nub(shader_color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
+    glVertexAttribPointer(default_shader.position, 2, GL_FLOAT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(default_shader.position);
+    glVertexAttrib4Nub(default_shader.color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
     glDrawArrays(GL_TRIANGLE_FAN, 0, n);
-    glDisableVertexAttribArray(shader_position);
-    glVertexAttribPointer(shader_position, 4, GL_FLOAT, GL_FALSE, 0, NULL);
+    glDisableVertexAttribArray(default_shader.position);
+    glVertexAttribPointer(default_shader.position, 4, GL_FLOAT, GL_FALSE, 0, NULL);
     free(v);
 }
 #define RAYONBOUTTON 40
@@ -238,9 +238,9 @@ static int jauge(int vi, int max) {
         kzc = kazeclick(xmouse,ymouse,14);
         draw_page(14, .45 + .2*sin(phaz*.61), .5*M_PI + .2*sin(phaz));
         phaz += 2.1*dt_sec;
-        glVertexAttrib4Nub(shader_color, 0x30, 0x60, 0xA0, 0xFF);
+        glVertexAttrib4Nub(default_shader.color, 0x30, 0x60, 0xA0, 0xFF);
         fill_rect(
-            shader_position,
+            default_shader.position,
             10,    win_height/3-(win_height>>3),
             10+jx, win_height/3+(win_height>>3),
             -1);

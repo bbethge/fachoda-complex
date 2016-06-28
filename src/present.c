@@ -18,6 +18,7 @@
  */
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 #include <jpeglib.h>
 #include <math.h>
 #include <time.h>
@@ -33,6 +34,12 @@
 static GLuint presenttex;
 static int IMGX, IMGY;
 static GLubyte presentbg[3];
+
+static struct {
+    GLuint program;
+    GLint position, tex_coord;
+    GLint tex_scale, texture;
+} shader;
 
 static void jloadpresent(void) {
     struct jpeg_decompress_struct cinfo;
@@ -77,6 +84,34 @@ static void jloadpresent(void) {
             presentimg);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    GLuint fragment_shader = compile_shader(
+            GL_FRAGMENT_SHADER, __FILE__, __LINE__,
+            "#version 130\n"
+            "\n"
+            "in vec4 VaryingColor;\n"
+            "in vec2 VaryingTexCoord;\n"
+            "\n"
+            "uniform sampler2D Texture;\n"
+            "\n"
+            "void main() {\n"
+            "    gl_FragColor.rgb = texture(Texture, VaryingTexCoord).rgb;\n"
+            "    gl_FragColor.a = 1;\n"
+            "}\n");
+    shader.program = link_shader_program(
+            __FILE__, __LINE__, default_vertex_shader, fragment_shader);
+    shader.position = glGetAttribLocation(shader.program, "Position");
+    shader.tex_coord = glGetAttribLocation(shader.program, "TexCoord");
+    shader.tex_scale = glGetUniformLocation(shader.program, "TexScale");
+    shader.texture = glGetUniformLocation(shader.program, "Texture");
+    if (
+            shader.position < 0 || shader.tex_coord < 0 || shader.tex_scale < 0
+            || shader.texture < 0)
+    {
+        SDL_ShowSimpleMessageBox(
+                SDL_MESSAGEBOX_ERROR, "Error", "Shader program incorrect "
+                "(unable to access vertex attributes or uniforms)", NULL);
+    }
 }
 
 void affpresent(int dx,int dy)
@@ -87,25 +122,34 @@ void affpresent(int dx,int dy)
             ((BACKCOLOR>>16)&0xFF)/255.0, ((BACKCOLOR>>8)&0xFF)/255.0,
             (BACKCOLOR&0xFF)/255.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
+    GLuint prev_program;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+    glUseProgram(shader.program);
+    glUniform1i(shader.texture, 0);
     glBindTexture(GL_TEXTURE_2D, presenttex);
     glEnable(GL_TEXTURE_2D);
-    glVertexAttrib4Nub(shader_color, 0xFF, 0xFF, 0xFF, 0xFF);
+    glUniform2f(shader.tex_scale, 1, 1);
     fill_rect(
-            shader_position, xb, yb, xb+IMGX, yb+IMGY,
-            shader_tex_coord, 0, 0, 1, 1,
+            shader.position, xb, yb, xb+IMGX, yb+IMGY,
+            shader.tex_coord, 0, 0, 1, 1,
             -1);
     glDisable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(prev_program);
+    assert(glGetError() == GL_NO_ERROR);
 }
 
 static void affpresentanim(int d)
 {
     int y;
     int xb=(win_width-IMGX)>>1, yb=(win_height-IMGY)>>1;
+    GLuint prev_program;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+    glUseProgram(shader.program);
+    glUniform1i(shader.texture, 0);
     glBindTexture(GL_TEXTURE_2D, presenttex);
     glEnable(GL_TEXTURE_2D);
-    glUniform2f(shader_tex_scale, 1./IMGX, 1./IMGY);
-    glVertexAttrib4Nub(shader_color, 0xFF, 0xFF, 0xFF, 0xFF);
+    glUniform2f(shader.tex_scale, 1./IMGX, 1./IMGY);
     for (y=0; y<IMGY; y++) {
         int yd;
         if (y&1) {
@@ -116,13 +160,15 @@ static void affpresentanim(int d)
             if (yd<1) yd=1;
         }
         fill_rect(
-                shader_position, xb, y+yb, xb+IMGX, y+yb+1,
-                shader_tex_coord, 0, yd, IMGX, yd+1,
+                shader.position, xb, y+yb, xb+IMGX, y+yb+1,
+                shader.tex_coord, 0, yd, IMGX, yd+1,
                 -1);
     }
-    glUniform2f(shader_tex_scale, 1, 1);
+    glUniform2f(shader.tex_scale, 1, 1);
     glDisable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(prev_program);
+    assert(glGetError() == GL_NO_ERROR);
 }
 
 void animpresent(void)

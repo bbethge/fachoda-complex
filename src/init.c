@@ -18,8 +18,10 @@
  */
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 #include <math.h>
 #include <values.h>
+#define GL_GLEXT_PROTOTYPES
 #include "heightfield.h"
 #include "robot.h"
 #include "video_sdl.h"
@@ -196,15 +198,15 @@ void affjauge(float j)
     if (nx>x) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_ONE, GL_ONE);
-        glVertexAttrib4Nub(shader_color, 0, 0x10, 0x80, 0xFF);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glVertexAttrib4Nub(default_shader.color, 0, 0x10, 0x80, 0xFF);
         fill_rect(
-            shader_position,
+            default_shader.position,
             x,  win_center_y-(win_height>>3),
             nx, win_center_y+(win_height>>3),
             -1);
         glBlendFunc(GL_ONE, GL_ZERO);
         glDisable(GL_BLEND);
+        assert(glGetError() == GL_NO_ERROR);
         buffer2video();
         x=nx;
     }

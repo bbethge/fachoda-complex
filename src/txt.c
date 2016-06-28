@@ -120,6 +120,44 @@ GLubyte num[10*SizeNumX*SizeNumY] = {
     0,   0,0xFF,0xFF,0xFF,0xFF,0xFF,   0
 };
 
+static struct {
+    GLuint program;
+    GLint position, color, tex_coord;
+    GLint tex_scale, texture;
+} shader;
+
+void inittxt() {
+    GLuint fragment_shader = compile_shader(
+            GL_FRAGMENT_SHADER, __FILE__, __LINE__,
+            "#version 130\n"
+            "\n"
+            "in vec4 VaryingColor;\n"
+            "in vec2 VaryingTexCoord;\n"
+            "\n"
+            "uniform sampler2D Texture;\n"
+            "\n"
+            "void main() {\n"
+            "    gl_FragColor = vec4(\n"
+            "         VaryingColor.rgb,\n"
+            "         VaryingColor.a * texture(Texture, VaryingTexCoord).r\n"
+            "    );\n"
+            "}\n");
+    shader.program = link_shader_program(
+            __FILE__, __LINE__, default_vertex_shader, fragment_shader);
+    shader.position = glGetAttribLocation(shader.program, "Position");
+    shader.color = glGetAttribLocation(shader.program, "Color");
+    shader.tex_coord = glGetAttribLocation(shader.program, "TexCoord");
+    shader.tex_scale = glGetUniformLocation(shader.program, "TexScale");
+    shader.texture = glGetUniformLocation(shader.program, "Texture");
+    if (
+            shader.position < 0 || shader.color < 0 || shader.tex_coord < 0
+            || shader.tex_scale < 0 || shader.texture < 0)
+    {
+        SDL_ShowSimpleMessageBox(
+                SDL_MESSAGEBOX_ERROR, "Error", "Invalid shader program", NULL);
+    }
+}
+
 // FIXME: draws nothing
 void pnumchar(int n, int x, int y, int c) {
     static GLuint numtex = 0;
@@ -135,13 +173,14 @@ void pnumchar(int n, int x, int y, int c) {
     }
     glBindTexture(GL_TEXTURE_2D, numtex);
     glEnable(GL_TEXTURE_2D);
-    glUniform2f(shader_tex_scale, 1, 0.1);
-    glVertexAttrib4Nub(shader_color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
+    //glUniform2f(default_shader.tex_scale, 1, 0.1);
+    glVertexAttrib4Nub(
+            default_shader.color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
     fill_rect(
-            shader_position, x, y+8, x+SizeNumX, y+SizeNumY,
-            shader_tex_coord, 0, n, 1, n+1,
+            default_shader.position, x, y+8, x+SizeNumX, y+SizeNumY,
+            //default_shader_tex_coord, 0, n, 1, n+1,
             -1);
-    glUniform2f(shader_tex_scale, 1, 1);
+    //glUniform2f(default_shader.tex_scale, 1, 1);
     glDisable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -158,8 +197,8 @@ void pnum(int n, int x, int y, int c, int just) {
         n/=10;
     } while (n!=0);
     if (sig==-1) {
-        glVertexAttrib4Nub(shader_color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
-        fill_rect(shader_position, x+2, y+4, x+6, y+5, -1);
+        glVertexAttrib4Nub(default_shader.color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
+        fill_rect(default_shader.position, x+2, y+4, x+6, y+5, -1);
     }
 }
 void pnumchara(int n, int x, int y, int c) {    // a = dans le mapping
@@ -194,6 +233,9 @@ void loadfont(char *fn, int nx, int ny, int cy) {
     int x,y,fx,fy,i,sx=0,sy=0;
     struct pixel *itmp;
     GLubyte *textmp;
+    if (shader.program == 0) {
+        inittxt();
+    }
     SizeCharY=cy;
     fonttexw = 1;
     while (fonttexw < SizeCharX) fonttexw <<= 1;
@@ -227,7 +269,7 @@ void loadfont(char *fn, int nx, int ny, int cy) {
     glBindTexture(GL_TEXTURE_2D, fonttex);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_ALPHA, fonttexw, fonttexh, 0, GL_ALPHA,
+            GL_TEXTURE_2D, 0, GL_RED, fonttexw, fonttexh, 0, GL_RED,
             GL_UNSIGNED_BYTE, textmp);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -239,6 +281,9 @@ int SizeBigCharY=50, SizeBigCharX=50, SizeBigChar=2500;
 GLuint BigFontTex;
 
 void loadbigfont(char *fn) {
+    if (shader.program == 0) {
+        inittxt();
+    }
     FILE *fil;
     int x,y,fx,sx=0,sy=0;
     struct pixel32 *itmp;
@@ -267,8 +312,8 @@ void loadbigfont(char *fn) {
     glBindTexture(GL_TEXTURE_2D, BigFontTex);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_LUMINANCE, SizeBigCharX, 13*SizeBigCharY, 0,
-            GL_LUMINANCE, GL_UNSIGNED_BYTE, BigFont);
+            GL_TEXTURE_2D, 0, GL_RED, SizeBigCharX, 13*SizeBigCharY, 0,
+            GL_RED, GL_UNSIGNED_BYTE, BigFont);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -314,24 +359,28 @@ void MMXAddSatInt(int *dst, int byte, int n)
 }
 
 void pbignumchar(int n, int x, int y, int coul) {
+    GLuint prev_program;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+    glUseProgram(shader.program);
+    glUniform1i(shader.texture, 0);
     glBindTexture(GL_TEXTURE_2D, BigFontTex);
     glEnable(GL_TEXTURE_2D);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_CONSTANT_COLOR, GL_ONE);
-    glBlendColor(
-            ((coul>>16)&0xFF)/255.f, ((coul>>8)&0xFF)/255.f, (coul&0xFF)/255.f,
-            1);
-    glUniform2f(shader_tex_scale, 1, 1./13);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glVertexAttrib4Nub(
+        shader.color, (coul>>16)&0xFF, (coul>>8)&0xFF, coul&0xFF, 0xFF
+    );
+    glUniform2f(shader.tex_scale, 1, 1./13);
     fill_rect(
-            shader_position, x, y, x+SizeBigCharX, y+SizeBigCharY,
-            shader_tex_coord, 0, n, 1, n+1,
-            -1);
-    glUniform2f(shader_tex_scale, 1, 1);
-    glBlendColor(0, 0, 0, 0);
+        shader.position, x, y, x+SizeBigCharX, y+SizeBigCharY,
+        shader.tex_coord, 0, n, 1, n+1, -1
+    );
+    glUniform2f(shader.tex_scale, 1, 1);
     glBlendFunc(GL_ONE, GL_ZERO);
     glDisable(GL_BLEND);
     glDisable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(prev_program);
     assert(glGetError()==GL_NO_ERROR);
 }
 void pbignum(int n, int x, int y, int just, char tot, char dolsig) {
@@ -375,26 +424,31 @@ void pcharady(int m, int *v, int c, int off) {
 void pchar(int m, int x, int y, int c) {
     int i, l;
     assert(is_printable(m));
+    GLint prev_program;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+    glUseProgram(shader.program);
+    glUniform1i(shader.texture, 0);
     glBindTexture(GL_TEXTURE_2D, fonttex);
     glEnable(GL_TEXTURE_2D);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glUniform2f(shader_tex_scale, 1, (GLfloat)SizeCharY/fonttexh);
-    glVertexAttrib4Nub(shader_color, (TextColfont>>16)&0xFF, (TextColfont>>8)&0xFF, TextColfont&0xFF, 0xFF);
+    glUniform2f(shader.tex_scale, 1, (GLfloat)SizeCharY/fonttexh);
+    glVertexAttrib4Nub(shader.color, (TextColfont>>16)&0xFF, (TextColfont>>8)&0xFF, TextColfont&0xFF, 0xFF);
     fill_rect(
-        shader_position, x+1, y+1, x+SizeCharX+1, y+SizeCharY+1,
-        shader_tex_coord, 0, m-16, 1, m-15,
+        shader.position, x+1, y+1, x+SizeCharX+1, y+SizeCharY+1,
+        shader.tex_coord, 0, m-16, 1, m-15,
         -1);
-    glVertexAttrib4Nub(shader_color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
+    glVertexAttrib4Nub(shader.color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
     fill_rect(
-        shader_position, x, y, x+SizeCharX, y+SizeCharY,
-        shader_tex_coord, 0, m-16, 1, m-15,
+        shader.position, x, y, x+SizeCharX, y+SizeCharY,
+        shader.tex_coord, 0, m-16, 1, m-15,
         -1);
-    glUniform2f(shader_tex_scale, 1, 1);
+    glUniform2f(shader.tex_scale, 1, 1);
     glBlendFunc(GL_ONE, GL_ZERO);
     glDisable(GL_BLEND);
     glDisable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(prev_program);
     assert(glGetError() == GL_NO_ERROR);
 }
 void pword(char const *m, int x, int y, int c) {

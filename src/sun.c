@@ -38,6 +38,12 @@ static struct {
     float x, y, z, xy;
 } stars[80];
 
+static struct {
+    GLuint program;
+    GLint position, tex_coord;
+    GLint tex_scale, texture;
+} shader;
+
 void initsol(void) {
     double r,teta;
     for (int y=-SunImgL/2; y<SunImgL/2; y++)
@@ -61,6 +67,35 @@ void initsol(void) {
     glBindTexture(GL_TEXTURE_2D, SunImgTex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
+    GLuint fragment_shader = compile_shader(
+        GL_FRAGMENT_SHADER, __FILE__, __LINE__,
+        "#version 130\n"
+        "\n"
+        "in vec4 VaryingColor;\n"
+        "in vec2 VaryingTexCoord;\n"
+        "\n"
+        "uniform sampler2D Texture;\n"
+        "\n"
+        "void main() {\n"
+        "    gl_FragColor = texture(Texture, VaryingTexCoord);\n"
+        "}\n"
+    );
+    shader.program = link_shader_program(
+        __FILE__, __LINE__, default_vertex_shader, fragment_shader
+    );
+    shader.position = glGetAttribLocation(shader.program, "Position");
+    shader.tex_coord = glGetAttribLocation(shader.program, "TexCoord");
+    shader.tex_scale = glGetUniformLocation(shader.program, "TexScale");
+    shader.texture = glGetUniformLocation(shader.program, "Texture");
+    if (
+        shader.position < 0 || shader.tex_coord < 0 || shader.tex_scale < 0
+        || shader.texture < 0
+    ) {
+        SDL_ShowSimpleMessageBox(
+            SDL_MESSAGEBOX_ERROR, "Error", "Invalid shader program "
+            "(unable to access vertex attributes or uniforms)", NULL
+        );
+    }
 
     // The stars
     for (unsigned i = 0; i < ARRAY_LEN(stars); i++){
@@ -176,26 +211,32 @@ void affsoleil(struct vector *L) {
                         }
                     }
                 }
+                GLuint prev_program;
+                glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+                glUseProgram(shader.program);
+                glUniform1i(shader.texture, 0);
                 glBindTexture(GL_TEXTURE_2D, SunImgTex);
                 glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 glTexImage2D(
-                        GL_TEXTURE_2D, 0, GL_RGBA, SunImgL, SunImgL, 0,
-                        GL_BGRA, GL_UNSIGNED_BYTE, SunImgRGBA);
+                    GL_TEXTURE_2D, 0, GL_RGBA, SunImgL, SunImgL, 0,
+                    GL_BGRA, GL_UNSIGNED_BYTE, SunImgRGBA
+                );
                 glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
                 glEnable(GL_TEXTURE_2D);
                 glEnable(GL_BLEND);
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                glVertexAttrib4Nub(shader_color, 0xFF, 0xFF, 0xFF, 0xFF);
+                glUniform2f(shader.tex_scale, 1, 1);
 
                 fill_rect(
-                        shader_position, xse, yse, xse+SunImgL, yse+SunImgL,
-                        shader_tex_coord, 0, 0, 1, 1,
-                        -1);
+                    shader.position, xse, yse, xse+SunImgL, yse+SunImgL,
+                    shader.tex_coord, 0, 0, 1, 1, -1
+                );
 
                 glBlendFunc(GL_ONE, GL_ZERO);
                 glDisable(GL_BLEND);
                 glDisable(GL_TEXTURE_2D);
                 glBindTexture(GL_TEXTURE_2D, 0);
+                glUseProgram(prev_program);
             }
         }
     }

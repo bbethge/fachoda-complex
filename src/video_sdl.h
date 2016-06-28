@@ -27,6 +27,14 @@
 
 extern struct pixel32 *videobuffer;
 
+GLuint compile_shader(
+    GLenum type, const char *filename, int line, const char *source
+);
+GLuint link_shader_program(
+    const char *filename, int line, GLuint vertex_shader,
+    GLuint fragment_shader
+);
+
 void buffer2video(void);
 
 void initvideo(bool fullscreen);
@@ -39,7 +47,12 @@ bool button_reset(unsigned b);
 void xproceed(void);
 
 extern int xmouse, ymouse;
-extern GLint shader_position, shader_color, shader_tex_coord;
-extern GLint shader_tex_scale;
+extern GLuint default_vertex_shader, default_fragment_shader;
+
+struct default_shader {
+    GLuint program;
+    GLint position, color;
+};
+extern struct default_shader default_shader;
 
 #endif

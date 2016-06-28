@@ -17,6 +17,7 @@
  * along with Fachoda.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <math.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <assert.h>
@@ -25,48 +26,62 @@
 #include "sound.h"
 //#include "SDL_opengles2.h"
 
-// The driver seems to need primitives not to be too far
-// off the screen, so we need to set gl_ClipDistance.
-static const char *vertex_shader_source[] = {
+static const char *vertex_shader_source =
     "#version 130\n"
     "\n"
-    "attribute vec4 position;\n"
-    "attribute vec4 color;\n"
-    "attribute vec2 tex_coord;\n"
+    "attribute vec4 Position;\n"
+    "attribute vec4 Color;\n"
+    "attribute vec2 TexCoord;\n"
     "\n"
     "out float gl_ClipDistance[6];\n"
+    "out vec4 VaryingColor;\n"
+    "out vec2 VaryingTexCoord;\n"
     "\n"
-    "uniform vec2 tex_scale;\n"
+    "uniform vec2 TexScale;\n"
     "\n"
     "void main() {\n"
-    "    gl_Position = gl_ModelViewProjectionMatrix * position;\n"
-    "    gl_FrontColor = color;\n"
-    "    gl_TexCoord[0] = vec4(tex_scale * tex_coord, 0, 1);\n"
+    "    gl_Position = gl_ModelViewProjectionMatrix * Position;\n"
+    "    VaryingColor = Color;\n"
+    "    VaryingTexCoord = TexScale * TexCoord;\n"
     "    gl_ClipDistance[0] = gl_Position.w - gl_Position.x;\n"
     "    gl_ClipDistance[1] = gl_Position.w + gl_Position.x;\n"
     "    gl_ClipDistance[2] = gl_Position.w - gl_Position.y;\n"
     "    gl_ClipDistance[3] = gl_Position.w + gl_Position.y;\n"
     "    gl_ClipDistance[4] = gl_Position.w - gl_Position.z;\n"
     "    gl_ClipDistance[5] = gl_Position.w + gl_Position.z;\n"
-    "}\n"
-};
+    "}\n";
+
+static const char *fragment_shader_source =
+    "#version 130\n"
+    "\n"
+    "in vec4 VaryingColor;\n"
+    "in vec2 VaryingTexCoord;\n"
+    "\n"
+    "void main() {\n"
+    "    gl_FragColor = VaryingColor;\n"
+    "}\n";
 
 static SDL_Window *window;
 
-GLint shader_position, shader_color, shader_tex_coord;
-GLint shader_tex_scale;
+GLuint default_vertex_shader, default_fragment_shader;
+struct default_shader default_shader;
 
-static char *astrcat(const char *a, const char *b) {
-    char *res = malloc(strlen(a)+strlen(b)+1);
-    strcpy(res, a);
-    strcpy(res + strlen(a), b);
-    return res;
+static char *my_asprintf(const char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    char test;
+    int size = vsnprintf(&test, 1, format, ap);
+    va_end(ap);
+    char *result = malloc(size+1);
+    va_start(ap, format);
+    vsnprintf(result, size+1, format, ap);
+    va_end(ap);
+    return result;
 }
 
 void initvideo(bool fullscreen)
 {
     int w, h;
-    GLuint vertex_shader, program;
     GLint status;
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         fprintf(stderr,"Couln't initialize SDL: %s\n",SDL_GetError());
@@ -81,9 +96,9 @@ void initvideo(bool fullscreen)
     SDL_GetWindowSize(window, &w, &h);
     printf("Set %dx%d mode\n",w,h);
     if (! SDL_GL_CreateContext(window)) {
-        char *msg =
-            astrcat("Couldn't create an OpenGL context: ",SDL_GetError());
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error",msg,window);
+        char *msg = my_asprintf(
+                "Couldn't create an OpenGL context: %s", SDL_GetError());
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", msg, window);
         free(msg);
         exit(1);
     }
@@ -94,56 +109,26 @@ void initvideo(bool fullscreen)
     glOrtho(0, win_width, win_height, 0, -1, 1);
     glMatrixMode(GL_MODELVIEW);
 
-    vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-    if (vertex_shader == 0) {
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error","Couldn't create a vertex shader",window);
+    default_vertex_shader = compile_shader(
+            GL_VERTEX_SHADER, __FILE__, __LINE__, vertex_shader_source);
+    default_fragment_shader = compile_shader(
+            GL_FRAGMENT_SHADER, __FILE__, __LINE__, fragment_shader_source);
+    default_shader.program = link_shader_program(
+            __FILE__, __LINE__, default_vertex_shader,
+            default_fragment_shader);
+    glUseProgram(default_shader.program);
+    default_shader.position = glGetAttribLocation(
+            default_shader.program, "Position");
+    default_shader.color = glGetAttribLocation(
+            default_shader.program, "Color");
+    if (default_shader.position < 0 || default_shader.color < 0)
+    {
+        SDL_ShowSimpleMessageBox(
+                SDL_MESSAGEBOX_ERROR, "Error",
+                "Default shader program incorrect (unable to access vertex "
+                "attributes or uniforms)", window);
         exit(1);
     }
-    glShaderSource(vertex_shader, sizeof(vertex_shader_source) / sizeof(vertex_shader_source[0]), vertex_shader_source, NULL);
-    glCompileShader(vertex_shader);
-    glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &status);
-    if (!status) {
-        GLint len;
-        char *log, *msg;
-        glGetShaderiv(vertex_shader, GL_INFO_LOG_LENGTH, &len);
-        log = malloc(len+1);
-        glGetShaderInfoLog(vertex_shader, len+1, NULL, log);
-        msg = astrcat("Vertex shader compilation failed: ", log);
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error",msg,window);
-        free(msg);
-        free(log);
-        exit(1);
-    }
-    program = glCreateProgram();
-    if (program == 0) {
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error","Couldn't create an OpenGL program",window);
-        exit(1);
-    }
-    glAttachShader(program, vertex_shader);
-    glLinkProgram(program);
-    glGetProgramiv(program, GL_LINK_STATUS, &status);
-    if (!status) {
-        GLint len;
-        char *log, *msg;
-        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &len);
-        log = malloc(len+1);
-        glGetProgramInfoLog(program, len+1, NULL, log);
-        msg = astrcat("OpenGL program linking failed: ", log);
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error",msg,window);
-        free(msg);
-        free(log);
-        exit(1);
-    }
-    glUseProgram(program);
-    shader_position = glGetAttribLocation(program, "position");
-    shader_color = glGetAttribLocation(program, "color");
-    shader_tex_coord = glGetAttribLocation(program, "tex_coord");
-    shader_tex_scale = glGetUniformLocation(program, "tex_scale");
-    if (shader_position < 0 || shader_color < 0 || shader_tex_coord < 0 || shader_tex_scale < 0) {
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Error","OpenGL program incorrect (unable to access vertex attributes or uniforms)",window);
-        exit(1);
-    }
-    glUniform2f(shader_tex_scale, 1, 1);
     for (int i = 0; i < 6; i++) {
         glEnable(GL_CLIP_DISTANCE0 + i);
     }
@@ -151,6 +136,70 @@ void initvideo(bool fullscreen)
     SDL_ShowCursor(0);
     SDL_EventState(SDL_WINDOWEVENT, SDL_ENABLE);
     SDL_EventState(SDL_MOUSEMOTION, SDL_IGNORE);
+}
+
+GLuint compile_shader(
+        GLenum type, const char *filename, int line, const char *source)
+{
+    GLuint shader = glCreateShader(type);
+    if (shader == 0) {
+        SDL_ShowSimpleMessageBox(
+                SDL_MESSAGEBOX_ERROR, "Error",
+                "Couldn't create a shader", window);
+        exit(1);
+    }
+    glShaderSource(shader, 1, &source, NULL);
+    glCompileShader(shader);
+    GLint status;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+    if (!status) {
+        GLint len;
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &len);
+        char *log, *msg;
+        log = malloc(len+1);
+        glGetShaderInfoLog(shader, len+1, NULL, log);
+        msg = my_asprintf(
+                "Shader compilation failed in %s line %d: %s", filename,
+                line, log);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", msg, window);
+        free(msg);
+        free(log);
+        exit(1);
+    }
+    return shader;
+}
+
+GLuint link_shader_program(
+        const char *filename, int line, GLuint vertex_shader,
+        GLuint fragment_shader)
+{
+    GLuint program = glCreateProgram();
+    if (program == 0) {
+        SDL_ShowSimpleMessageBox(
+                SDL_MESSAGEBOX_ERROR, "Error",
+                "Couldn't create a shader program", window);
+        exit(1);
+    }
+    glAttachShader(program, vertex_shader);
+    glAttachShader(program, fragment_shader);
+    glLinkProgram(program);
+    GLint status;
+    glGetProgramiv(program, GL_LINK_STATUS, &status);
+    if (!status) {
+        GLint len;
+        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &len);
+        char *log, *msg;
+        log = malloc(len+1);
+        glGetProgramInfoLog(program, len+1, NULL, log);
+        msg = my_asprintf(
+                "Shader program linking failed in %s line %d: %s", filename,
+                line, log);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", msg, window);
+        free(msg);
+        free(log);
+        exit(1);
+    }
+    return program;
 }
 
 void buffer2video(void)

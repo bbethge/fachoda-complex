@@ -35,49 +35,53 @@ void initrender() {
 #define MAXNO 5000
     oL = malloc(MAXNO*sizeof(*oL));   // nb objet max dans un ak
 }
+
 void plot(int x, int y, int r)
 {
     GLint v[2] = { x+win_center_x, y+win_center_y };
-    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, v);
-    glEnableVertexAttribArray(shader_position);
-    glVertexAttrib4Nub(shader_color, (r>>16)&0xFF, (r>>8)&0xFF, r&0xFF, 0xFF);
+    glVertexAttribPointer(default_shader.position, 2, GL_INT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(default_shader.position);
+    glVertexAttrib4Nub(
+        default_shader.color, (r>>16)&0xFF, (r>>8)&0xFF, r&0xFF, 0xFF
+    );
     glDrawArrays(GL_POINTS, 0, 1);
-    glDisableVertexAttribArray(shader_position);
-    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, NULL);
+    glDisableVertexAttribArray(default_shader.position);
 }
 
 // Draw a pixel at 50% opacity
 void mixplot(int x, int y, int r, int g, int b){
     GLint v[2] = { x+win_center_x, y+win_center_y };
-    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, v);
-    glEnableVertexAttribArray(shader_position);
-    glVertexAttrib4Nub(shader_color, r, g, b, 0x7F);
+    glVertexAttribPointer(default_shader.position, 2, GL_INT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(default_shader.position);
+    glVertexAttrib4Nub(default_shader.color, r, g, b, 0x7F);
     glDrawArrays(GL_POINTS, 0, 1);
-    glDisableVertexAttribArray(shader_position);
-    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, NULL);
+    glDisableVertexAttribArray(default_shader.position);
 }
 // Draw a small white crosshair
+// FIXME: does not reproduce original behavior
 void plot_stick(int x,int y){
-    plot(x-5,y,0xA0A0A0);
-    plot(x+5,y,0xA0A0A0);
-    plot(x,y-5,0xA0A0A0);
-    plot(x,y+5,0xA0A0A0);
-    plot(x-4,y,0xB0B0B0);
-    plot(x+4,y,0xB0B0B0);
-    plot(x,y-4,0xB0B0B0);
-    plot(x,y+4,0xB0B0B0);
-    plot(x-3,y,0xC0C0C0);
-    plot(x+3,y,0xC0C0C0);
-    plot(x,y-3,0xC0C0C0);
-    plot(x,y+3,0xC0C0C0);
-    plot(x-2,y,0xD0D0D0);
-    plot(x+2,y,0xD0D0D0);
-    plot(x,y-2,0xD0D0D0);
-    plot(x,y+2,0xD0D0D0);
-    plot(x-1,y,0xE0E0E0);
-    plot(x+1,y,0xE0E0E0);
-    plot(x,y-1,0xE0E0E0);
-    plot(x,y+1,0xE0E0E0);
+    GLfloat v[8*2] = {
+        x-5, y,  x, y,   x+5, y,  x, y,
+        x, y-5,  x, y,   x, y+5,  x, y,
+    };
+    GLubyte c[8*3] = {
+        0xA0, 0xA0, 0xA0,  0xF0, 0xF0, 0xF0,
+        0xA0, 0xA0, 0xA0,  0xF0, 0xF0, 0xF0,
+        0xA0, 0xA0, 0xA0,  0xF0, 0xF0, 0xF0,
+        0xA0, 0xA0, 0xA0,  0xF0, 0xF0, 0xF0,
+    };
+    glVertexAttribPointer(default_shader.position, 2, GL_FLOAT, GL_FALSE, 0, v);
+    glVertexAttribPointer(
+        default_shader.color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c
+    );
+    glEnableVertexAttribArray(default_shader.position);
+    glEnableVertexAttribArray(default_shader.color);
+    glPushMatrix();
+    glTranslatef(win_center_x, win_center_y, 1);
+    glDrawArrays(GL_LINES, 0, 8);
+    glPopMatrix();
+    glDisableVertexAttribArray(default_shader.position);
+    glDisableVertexAttribArray(default_shader.color);
 }
 // Draw a tiny yellow ball
 void plotboule(int x,int y) {
@@ -107,20 +111,28 @@ void plot_cursor(int x,int y) {
     a+=.31; ar+=.2;
 }
 // Draw a circle (unfilled)
+// FIXME: antialiasing does not work
 #define CERCLE_MAX_SIDES 180
 void cercle(int x, int y, int radius, int c) {
     int i, n = MIN(4+radius/2, CERCLE_MAX_SIDES);
     GLfloat v[CERCLE_MAX_SIDES][2];
-    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, v);
-    glEnableVertexAttribArray(shader_position);
-    glVertexAttrib4Nub(shader_color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF);
+    glEnable(GL_LINE_SMOOTH);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glVertexAttribPointer(default_shader.position, 2, GL_FLOAT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(default_shader.position);
+    glVertexAttrib4Nub(
+        default_shader.color, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 0xFF
+    );
     for (i=0; i<n; i++) {
         v[i][0] = x+win_center_x+radius*cos(2*M_PI*i/n);
         v[i][1] = y+win_center_y+radius*sin(2*M_PI*i/n);
     }
     glDrawArrays(GL_LINE_LOOP, 0, n);
-    glDisableVertexAttribArray(shader_position);
-    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glDisableVertexAttribArray(default_shader.position);
+    glBlendFunc(GL_ONE, GL_ZERO);
+    glDisable(GL_BLEND);
+    glDisable(GL_LINE_SMOOTH);
 }
 
 extern inline int color_of_pixel(struct pixel c);
@@ -132,24 +144,24 @@ void polyflat(struct vector *p1, struct vector *p2, struct vector *p3, struct pi
         p2->x, p2->y, p2->z,
         p3->x, p3->y, p3->z
     };
-    glVertexAttribPointer(shader_position, 3, GL_FLOAT, GL_FALSE, 0, v);
-    glEnableVertexAttribArray(shader_position);
-    glVertexAttrib4Nub(shader_color, coul.r, coul.g, coul.b, 0xFF);
+    glVertexAttribPointer(default_shader.position, 3, GL_FLOAT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(default_shader.position);
+    glVertexAttrib4Nub(default_shader.color, coul.r, coul.g, coul.b, 0xFF);
     glDrawArrays(GL_TRIANGLES, 0, 3);
-    glDisableVertexAttribArray(shader_position);
-    glVertexAttribPointer(shader_position, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glDisableVertexAttribArray(default_shader.position);
 }
 void drawline(struct vect2d const *p1, struct vect2d const *p2, int col) {
     GLint v[4] = {
         p1->x, p1->y,
         p2->x, p2->y
     };
-    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, v);
-    glEnableVertexAttribArray(shader_position);
-    glVertexAttrib4Nub(shader_color, (col>>16)&0xFF, (col>>8)&0xFF, col&0xFF, 0xFF);
+    glVertexAttribPointer(default_shader.position, 2, GL_INT, GL_FALSE, 0, v);
+    glEnableVertexAttribArray(default_shader.position);
+    glVertexAttrib4Nub(
+        default_shader.color, (col>>16)&0xFF, (col>>8)&0xFF, col&0xFF, 0xFF
+    );
     glDrawArrays(GL_LINES, 0, 2);
-    glDisableVertexAttribArray(shader_position);
-    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, NULL);
+    glDisableVertexAttribArray(default_shader.position);
 }
 
 void draw_rectangle(struct vect2d const *restrict min, struct vect2d const *restrict max, int col)
@@ -317,19 +329,23 @@ void plotphare(int x, int y, int r) {
         v[1+i][0] = x+r*cosf(2*M_PI*i/n); v[1+i][1] = y+r*sinf(2*M_PI*i/n);
         c[1+i][0] = c[1+i][1] = c[1+i][2] = 0;
     }
-    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, (GLubyte*)v[1] - (GLubyte*)v[0], v);
-    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, (GLubyte*)c[1] - (GLubyte*)c[0], c);
+    glVertexAttribPointer(
+        default_shader.position, 2, GL_FLOAT, GL_FALSE,
+        (GLubyte*)v[1] - (GLubyte*)v[0], v
+    );
+    glVertexAttribPointer(
+        default_shader.color, 3, GL_UNSIGNED_BYTE, GL_TRUE,
+        (GLubyte*)c[1] - (GLubyte*)c[0], c
+    );
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    glEnableVertexAttribArray(shader_position);
-    glEnableVertexAttribArray(shader_color);
+    glEnableVertexAttribArray(default_shader.position);
+    glEnableVertexAttribArray(default_shader.color);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 2+n);
-    glDisableVertexAttribArray(shader_position);
-    glDisableVertexAttribArray(shader_color);
+    glDisableVertexAttribArray(default_shader.position);
+    glDisableVertexAttribArray(default_shader.color);
     glBlendFunc(GL_ONE, GL_ONE);
     glDisable(GL_BLEND);
-    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_FALSE, 0, NULL);
 }
 
 // Draw grey with value inten*sqrt(r**2-(xx-x)**2-(yy-y)**2)
@@ -342,10 +358,12 @@ static void plotblob(int x, int y, int r, int inten) {
     GLubyte lum_i, lum_o;
     v = malloc(255*181*2*2*sizeof(v[0]));
     c = malloc(255*181*2*3*sizeof(c[0]));
-    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, v);
-    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c);
-    glEnableVertexAttribArray(shader_position);
-    glEnableVertexAttribArray(shader_color);
+    glVertexAttribPointer(default_shader.position, 2, GL_FLOAT, GL_FALSE, 0, v);
+    glVertexAttribPointer(
+        default_shader.color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c
+    );
+    glEnableVertexAttribArray(default_shader.position);
+    glEnableVertexAttribArray(default_shader.color);
     v[0] = x; v[1] = y;
     c[0] = c[1] = c[2] = inten;
     lum_o = inten*sqrtf(1-1.f/(n_rad*n_rad));
@@ -369,10 +387,8 @@ static void plotblob(int x, int y, int r, int inten) {
         }
     }
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 2*(n_circ+1)*(n_rad-1));
-    glDisableVertexAttribArray(shader_position);
-    glDisableVertexAttribArray(shader_color);
-    glVertexAttribPointer(shader_position, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, NULL);
+    glDisableVertexAttribArray(default_shader.position);
+    glDisableVertexAttribArray(default_shader.color);
     free(v);
     free(c);
 }
@@ -489,23 +505,27 @@ static void render_obj(int o, int no)
         } else pts[p].xl = MAXINT;
     }
     glPushMatrix();
-    glMultTransposeMatrixf((GLfloat [16]){
+    glMultTransposeMatrixf(
+        (GLfloat [16]) {
             co.x.x, co.y.x, co.z.x, obj[o].posc.x,
             co.x.y, co.y.y, co.z.y, obj[o].posc.y,
             co.x.z, co.y.z, co.z.z, obj[o].posc.z,
-            0,      0,      0,      1});
+            0,      0,      0,      1
+        }
+    );
     if (obj[o].type==TYPE_SHOT) {
         struct vector *pt = mod[obj[o].model].pts[mo];
         GLfloat v[6] = {
             pt[0].x, pt[0].y, pt[0].z,
             pt[1].x, pt[1].y, pt[1].z
         };
-        glVertexAttribPointer(shader_position, 3, GL_FLOAT, GL_FALSE, 0, v);
-        glEnableVertexAttribArray(shader_position);
-        glVertexAttrib4Nub(shader_color, 0xFF, 0xA0, 0xF0, 0xFF);
+        glVertexAttribPointer(
+            default_shader.position, 3, GL_FLOAT, GL_FALSE, 0, v
+        );
+        glEnableVertexAttribArray(default_shader.position);
+        glVertexAttrib4Nub(default_shader.color, 0xFF, 0xA0, 0xF0, 0xFF);
         glDrawArrays(GL_LINES, 0, 2);
-        glDisableVertexAttribArray(shader_position);
-        glVertexAttribPointer(shader_position, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+        glDisableVertexAttribArray(default_shader.position);
     } else {
         for (int p=0; p<mod[obj[o].model].nbfaces[mo]; p++) {
             if (mod[obj[o].model].fac[mo][p].norm.x != 0 ||
@@ -546,16 +566,18 @@ static void render_obj(int o, int no)
                 }
                 if (pts[mod[obj[o].model].fac[mo][p].p[0]].xl!=MAXINT && pts[mod[obj[o].model].fac[mo][p].p[1]].xl!=MAXINT && pts[mod[obj[o].model].fac[mo][p].p[2]].xl!=MAXINT)
                     polyphong(
-                            &pts[mod[obj[o].model].fac[mo][p].p[0]],
-                            &pts[mod[obj[o].model].fac[mo][p].p[1]],
-                            &pts[mod[obj[o].model].fac[mo][p].p[2]],
-                            coul);
+                        &pts[mod[obj[o].model].fac[mo][p].p[0]],
+                        &pts[mod[obj[o].model].fac[mo][p].p[1]],
+                        &pts[mod[obj[o].model].fac[mo][p].p[2]],
+                        coul
+                    );
                 else
                     polyflat(
-                            &pts[mod[obj[o].model].fac[mo][p].p[0]].v,
-                            &pts[mod[obj[o].model].fac[mo][p].p[1]].v,
-                            &pts[mod[obj[o].model].fac[mo][p].p[2]].v,
-                            coul);
+                        &pts[mod[obj[o].model].fac[mo][p].p[0]].v,
+                        &pts[mod[obj[o].model].fac[mo][p].p[1]].v,
+                        &pts[mod[obj[o].model].fac[mo][p].p[2]].v,
+                        coul
+                    );
             }
             glDisable(GL_CULL_FACE);
         }
@@ -603,9 +625,10 @@ void renderer(int ak, enum render_part fast) {
     glPushMatrix();
     glLoadIdentity();
     glFrustum(
-            -1, 1,
-            -(GLdouble)win_height/win_width, (GLdouble)win_height/win_width,
-            1, 10000);
+        -1, 1,
+        -(GLdouble)win_height/win_width, (GLdouble)win_height/win_width,
+        1, 10000
+    );
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glScalef(1, -1, -1);
@@ -632,15 +655,18 @@ void renderer(int ak, enum render_part fast) {
                     else pts[p].v.x = MAXINT;
                 }
                 for (p=0; p<mod[obj[o].model].nbfaces[1]; p++) {
-                    if (scalaire(&mod[obj[o].model].fac[1][p].norm,&oL[no].z)<=0 &&
-                            pts[mod[obj[o].model].fac[1][p].p[0]].v.x != MAXINT &&
-                            pts[mod[obj[o].model].fac[1][p].p[1]].v.x != MAXINT &&
-                            pts[mod[obj[o].model].fac[1][p].p[2]].v.x != MAXINT)
+                    if (
+                        scalaire(&mod[obj[o].model].fac[1][p].norm,&oL[no].z)<=0 && pts[mod[obj[o].model].fac[1][p].p[0]].v.x != MAXINT
+                        && pts[mod[obj[o].model].fac[1][p].p[1]].v.x != MAXINT
+                        && pts[mod[obj[o].model].fac[1][p].p[2]].v.x != MAXINT
+                    ) {
                         polyflat(
-                                &pts[mod[obj[o].model].fac[1][p].p[0]].v,
-                                &pts[mod[obj[o].model].fac[1][p].p[1]].v,
-                                &pts[mod[obj[o].model].fac[1][p].p[2]].v,
-                                (struct pixel){ .r = 0, .g = 0, .b = 0});
+                            &pts[mod[obj[o].model].fac[1][p].p[0]].v,
+                            &pts[mod[obj[o].model].fac[1][p].p[1]].v,
+                            &pts[mod[obj[o].model].fac[1][p].p[2]].v,
+                            (struct pixel){ .r = 0, .g = 0, .b = 0}
+                        );
+                    }
                 }
             }
         }

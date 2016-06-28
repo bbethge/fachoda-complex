@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <assert.h>
 #include <math.h>
 #include <values.h>
 #define GL_GLEXT_PROTOTYPES
@@ -432,24 +433,30 @@ static void polydots(struct vecic const *p1, struct vecic const *p2, struct veci
         c[3*n+2] = add_sat(p3->c.b, dc, 255);
         n++;
     }
-    glVertexAttribPointer(shader_position, 3, GL_FLOAT, GL_FALSE, 0, v);
-    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c);
-    glEnableVertexAttribArray(shader_position);
-    glEnableVertexAttribArray(shader_color);
+    glVertexAttribPointer(
+        default_shader.position, 3, GL_FLOAT, GL_FALSE, 0, v
+    );
+    glVertexAttribPointer(
+        default_shader.color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c
+    );
+    glEnableVertexAttribArray(default_shader.position);
+    glEnableVertexAttribArray(default_shader.color);
     glPushMatrix();
     glScalef(1, 1, -1);
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
     glFrustum(
-            -win_center_x, win_center_x, win_center_y, -win_center_y,
-            z_near, DIST_DOTS);
+        -win_center_x, win_center_x, win_center_y, -win_center_y,
+        z_near, DIST_DOTS
+    );
     glDrawArrays(GL_POINTS, 0, n);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
     glPopMatrix();
-    glDisableVertexAttribArray(shader_position);
-    glDisableVertexAttribArray(shader_color);
+    glDisableVertexAttribArray(default_shader.position);
+    glDisableVertexAttribArray(default_shader.color);
+    assert(glGetError() == GL_NO_ERROR);
 }
 
 /* We will draw the world using the painter method.
@@ -849,15 +856,15 @@ void draw_ground_and_objects(void)
 bool poly_gouraud(struct vect2dc *p1, struct vect2dc *p2, struct vect2dc *p3)
 {
     struct vect2dc *tmp, *p_maxx, *p_minx;
-    GLint v[3][2] = {
-        { p1->v.x, p1->v.y },
-        { p2->v.x, p2->v.y },
-        { p3->v.x, p3->v.y }
+    GLint v[3*2] = {
+        p1->v.x, p1->v.y,
+        p2->v.x, p2->v.y,
+        p3->v.x, p3->v.y
     };
-    GLubyte c[3][3] = {
-        { p1->c.r, p1->c.g, p1->c.b },
-        { p2->c.r, p2->c.g, p2->c.b },
-        { p3->c.r, p3->c.g, p3->c.b }
+    GLubyte c[3*3] = {
+        p1->c.r, p1->c.g, p1->c.b,
+        p2->c.r, p2->c.g, p2->c.b,
+        p3->c.r, p3->c.g, p3->c.b
     };
     // order points in ascending Y
     if (p2->v.y<p1->v.y) { tmp=p1; p1=p2; p2=tmp; }
@@ -872,15 +879,20 @@ bool poly_gouraud(struct vect2dc *p1, struct vect2dc *p2, struct vect2dc *p3)
     if (p2->v.x<p_minx->v.x) p_minx=p2;
     if (p3->v.x<p_minx->v.x) p_minx=p3;
     if (p_minx->v.x>win_width) return false;
-    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, (void*)v[1] - (void*)v[0], v);
-    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, (void*)c[1] - (void*)c[0], c);
-    glEnableVertexAttribArray(shader_position);
-    glEnableVertexAttribArray(shader_color);
+    glVertexAttribPointer(default_shader.position, 2, GL_INT, GL_FALSE, 0, v);
+    glVertexAttribPointer(
+        default_shader.color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c
+    );
+    glEnableVertexAttribArray(default_shader.position);
+    glEnableVertexAttribArray(default_shader.color);
     glDrawArrays(GL_TRIANGLES, 0, 3);
-    glDisableVertexAttribArray(shader_position);
-    glDisableVertexAttribArray(shader_color);
-    glVertexAttribPointer(shader_position, 2, GL_INT, GL_FALSE, 0, NULL);
-    glVertexAttribPointer(shader_color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, NULL);
+    glDisableVertexAttribArray(default_shader.position);
+    glDisableVertexAttribArray(default_shader.color);
+    glVertexAttribPointer(default_shader.position, 2, GL_INT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(
+        default_shader.color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, NULL
+    );
+    assert(glGetError() == GL_NO_ERROR);
     return true;
 }
 
