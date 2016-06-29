@@ -28,12 +28,115 @@
 #include "heightfield.h"
 #include "SDL_opengl.h"
 
+struct {
+    GLuint program;
+    GLint position, color;
+} blob_shader;
+
+static struct {
+    GLuint program;
+    GLint position, normal, color;
+    GLint light_matrix;
+} phong_shader;
+
 struct vectorlum *pts;
 struct matrix *oL;
 void initrender() {
     pts = malloc(3000*sizeof(*pts));   // nbpts max par objets
 #define MAXNO 5000
     oL = malloc(MAXNO*sizeof(*oL));   // nb objet max dans un ak
+
+    GLuint blob_fragment_shader = compile_shader(
+        GL_FRAGMENT_SHADER, __FILE__, __LINE__,
+        "#version 130\n"
+        "\n"
+        "in vec4 VaryingColor;\n"
+        "in vec2 VaryingTexCoord;\n"
+        "\n"
+        "void main() {\n"
+        "    gl_FragColor.rgb =\n"
+        "        VaryingColor.rgb\n"
+        "        * sqrt(1 - dot(gl_PointCoord, gl_PointCoord));\n"
+        "    gl_FragColor.a = 1;\n"
+        "}\n"
+    );
+    blob_shader.program = link_shader_program(
+        __FILE__, __LINE__, default_vertex_shader, blob_fragment_shader
+    );
+    blob_shader.position = glGetAttribLocation(
+        blob_shader.program, "Position"
+    );
+    blob_shader.color = glGetAttribLocation(blob_shader.program, "Color");
+    if (blob_shader.position < 0 || blob_shader.color < 0) {
+        SDL_ShowSimpleMessageBox(
+            SDL_MESSAGEBOX_ERROR, "Error", "Invalid shader program "
+            "(unable to access vertex attributes or uniforms)", NULL
+        );
+    }
+
+    GLuint phong_vertex_shader = compile_shader(
+        GL_VERTEX_SHADER, __FILE__, __LINE__,
+        "#version 130\n"
+        "\n"
+        "in vec4 Position;\n"
+        "in vec3 Normal;\n"
+        "in vec4 Color;\n"
+        "\n"
+        "out float gl_ClipDistance[6];\n"
+        "out vec4 VaryingColor;\n"
+        "out vec3 LightVector;\n"
+        "\n"
+        "uniform mat3 LightMatrix;\n"
+        "\n"
+        "void main() {\n"
+        "    gl_Position = gl_ModelViewProjectionMatrix * Position;\n"
+        "    VaryingColor = Color;\n"
+        "    // on calcule aussi les projs des\n"
+        "    // norms dans le plan lumineux infiniment éloigné\n"
+        "    LightVector = LightMatrix * Normal;\n"
+        "    gl_ClipDistance[0] = gl_Position.w - gl_Position.x;\n"
+        "    gl_ClipDistance[1] = gl_Position.w + gl_Position.x;\n"
+        "    gl_ClipDistance[2] = gl_Position.w - gl_Position.y;\n"
+        "    gl_ClipDistance[3] = gl_Position.w + gl_Position.y;\n"
+        "    gl_ClipDistance[4] = gl_Position.w - gl_Position.z;\n"
+        "    gl_ClipDistance[5] = gl_Position.w + gl_Position.z;\n"
+        "}\n"
+    );
+    GLuint phong_fragment_shader = compile_shader(
+        GL_FRAGMENT_SHADER, __FILE__, __LINE__,
+        "#version 130\n"
+        "\n"
+        "in vec4 VaryingColor;\n"
+        "in vec3 LightVector;\n"
+        "\n"
+        "void main() {\n"
+        "    gl_FragColor = VaryingColor;\n"
+        "    if (LightVector.z < 0) {\n"
+        "        gl_FragColor.rgb +=\n"
+        "            vec3(180./255*exp(-length(LightVector.xy)/50));\n"
+        "    }\n"
+        "}\n"
+    );
+    phong_shader.program = link_shader_program(
+        __FILE__, __LINE__, phong_vertex_shader, phong_fragment_shader
+    );
+    phong_shader.position = glGetAttribLocation(
+        phong_shader.program, "Position"
+    );
+    phong_shader.normal = glGetAttribLocation(phong_shader.program, "Normal");
+    phong_shader.color = glGetAttribLocation(phong_shader.program, "Color");
+    phong_shader.light_matrix = glGetUniformLocation(
+        phong_shader.program, "LightMatrix"
+    );
+    if (
+        phong_shader.position < 0 || phong_shader.normal < 0
+        || phong_shader.color < 0 || phong_shader.light_matrix < 0
+    ) {
+        SDL_ShowSimpleMessageBox(
+            SDL_MESSAGEBOX_ERROR, "Error", "Invalid shader program "
+            "(unable to access vertex attributes or uniforms)", NULL
+        );
+    }
 }
 
 void plot(int x, int y, int r)
@@ -497,12 +600,6 @@ static void render_obj(int o, int no)
     mulmt3(&co,&obj[0].rot,&obj[o].rot);
     for (int p=0; p<mod[obj[o].model].nbpts[mo]; p++) {
         pts[p].v = mod[obj[o].model].pts[mo][p];
-        // on calcule aussi les projs des
-        // norms dans le plan lumineux infiniment éloigné
-        if (scalaire(&mod[obj[o].model].norm[mo][p],&oL[no].z)<0) {
-            pts[p].xl = scalaire(&mod[obj[o].model].norm[mo][p],&oL[no].x);
-            pts[p].yl = scalaire(&mod[obj[o].model].norm[mo][p],&oL[no].y);
-        } else pts[p].xl = MAXINT;
     }
     glPushMatrix();
     glMultTransposeMatrixf(
@@ -564,20 +661,51 @@ static void render_obj(int o, int no)
                     darken(&coul.g);
                     darken(&coul.b);
                 }
-                if (pts[mod[obj[o].model].fac[mo][p].p[0]].xl!=MAXINT && pts[mod[obj[o].model].fac[mo][p].p[1]].xl!=MAXINT && pts[mod[obj[o].model].fac[mo][p].p[2]].xl!=MAXINT)
-                    polyphong(
-                        &pts[mod[obj[o].model].fac[mo][p].p[0]],
-                        &pts[mod[obj[o].model].fac[mo][p].p[1]],
-                        &pts[mod[obj[o].model].fac[mo][p].p[2]],
-                        coul
-                    );
-                else
-                    polyflat(
-                        &pts[mod[obj[o].model].fac[mo][p].p[0]].v,
-                        &pts[mod[obj[o].model].fac[mo][p].p[1]].v,
-                        &pts[mod[obj[o].model].fac[mo][p].p[2]].v,
-                        coul
-                    );
+                GLuint prev_program;
+                glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+                glUseProgram(phong_shader.program);
+                struct vector *pt[3];
+                struct vector *n[3];
+                for (int i = 0; i < 3; i++) {
+                    pt[i] = &mod[obj[o].model].pts[mo][
+                        mod[obj[o].model].fac[mo][p].p[i]
+                    ];
+                    n[i] = &mod[obj[o].model].norm[mo][
+                        mod[obj[o].model].fac[mo][p].p[i]
+                    ];
+                }
+                glVertexAttribPointer(
+                    phong_shader.position, 3, GL_FLOAT, GL_FALSE, 0,
+                    (GLfloat [3*3]) {
+                        pt[0]->x, pt[0]->y, pt[0]->z,
+                        pt[1]->x, pt[1]->y, pt[1]->z,
+                        pt[2]->x, pt[2]->y, pt[2]->z,
+                    }
+                );
+                glVertexAttribPointer(
+                    phong_shader.normal, 3, GL_FLOAT, GL_FALSE, 0,
+                    (GLfloat [3*3]) {
+                        n[0]->x, n[0]->y, n[0]->z,
+                        n[1]->x, n[1]->y, n[1]->z,
+                        n[2]->x, n[2]->y, n[2]->z,
+                    }
+                );
+                glUniformMatrix3fv(
+                    phong_shader.light_matrix, 1, GL_FALSE, (GLfloat [3*3]) {
+                        oL[no].x.x, oL[no].y.x, oL[no].z.x,  // Transposed!
+                        oL[no].x.y, oL[no].y.y, oL[no].z.y,
+                        oL[no].x.z, oL[no].y.z, oL[no].z.z,
+                    }
+                );
+                glEnableVertexAttribArray(phong_shader.position);
+                glEnableVertexAttribArray(phong_shader.normal);
+                glVertexAttrib4Nub(
+                    phong_shader.color, coul.r, coul.g, coul.b, 0xFF
+                );
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+                glDisableVertexAttribArray(phong_shader.position);
+                glDisableVertexAttribArray(phong_shader.normal);
+                glUseProgram(prev_program);
             }
             glDisable(GL_CULL_FACE);
         }

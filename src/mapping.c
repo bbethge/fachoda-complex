@@ -34,12 +34,6 @@ static struct {
     GLint tex_scale, texture;
 } map_shader;
 
-static struct {
-    GLuint program;
-    GLint position, color, tex_coord;
-    GLint tex_scale, texture;
-} phong_shader;
-
 #define MAX_PRECA 180
 void initmapping(void)
 {
@@ -92,42 +86,6 @@ void initmapping(void)
         );
     }
 
-    GLuint phong_fragment_shader = compile_shader(
-        GL_FRAGMENT_SHADER, __FILE__, __LINE__,
-        "#version 130\n"
-        "\n"
-        "in vec4 VaryingColor;\n"
-        "in vec2 VaryingTexCoord;\n"
-        "\n"
-        "uniform sampler2D Texture;\n"
-        "\n"
-        "void main() {\n"
-        "    gl_FragColor = VaryingColor + texture(Texture, VaryingTexCoord);\n"
-        "}\n"
-    );
-    phong_shader.program = link_shader_program(
-        __FILE__, __LINE__, default_vertex_shader, phong_fragment_shader
-    );
-    phong_shader.position = glGetAttribLocation(phong_shader.program, "Position");
-    phong_shader.color = glGetAttribLocation(phong_shader.program, "Color");
-    phong_shader.tex_coord = glGetAttribLocation(
-        phong_shader.program, "TexCoord"
-    );
-    phong_shader.tex_scale = glGetUniformLocation(
-        phong_shader.program, "TexScale"
-    );
-    phong_shader.texture = glGetUniformLocation(phong_shader.program, "Texture");
-    if (
-        phong_shader.position < 0 || phong_shader.color < 0
-        || phong_shader.tex_coord < 0 || phong_shader.tex_scale < 0
-        || phong_shader.texture < 0
-    ) {
-        SDL_ShowSimpleMessageBox(
-            SDL_MESSAGEBOX_ERROR, "Error", "Invalid shader program "
-            "(unable to access vertex attributes or uniforms)", NULL
-        );
-    }
-
     mapping = malloc(256*256*sizeof(*mapping));
 }
 
@@ -166,36 +124,5 @@ void polymap(struct vectorm *p1, struct vectorm *p2, struct vectorm *p3) {
     glDisable(GL_TEXTURE_2D);
     glDisableVertexAttribArray(map_shader.position);
     glDisableVertexAttribArray(map_shader.tex_coord);
-    glUseProgram(prev_program);
-}
-
-void polyphong(struct vectorlum *p1, struct vectorlum *p2, struct vectorlum *p3, struct pixel coul) {
-    GLfloat v[3*3] = {
-        p1->v.x, p1->v.y, p1->v.z,
-        p2->v.x, p2->v.y, p2->v.z,
-        p3->v.x, p3->v.y, p3->v.z
-    };
-    GLfloat tc[3*2] = {
-        p1->xl/(float)(1<<(16-vf)), p1->yl/(float)(1<<(16-vf)),
-        p2->xl/(float)(1<<(16-vf)), p2->yl/(float)(1<<(16-vf)),
-        p3->xl/(float)(1<<(16-vf)), p3->yl/(float)(1<<(16-vf))
-    };
-    GLuint prev_program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
-    glUseProgram(phong_shader.program);
-    glUniform1i(phong_shader.texture, 0);
-    glBindTexture(GL_TEXTURE_2D, precatex);
-    glEnable(GL_TEXTURE_2D);
-    glVertexAttribPointer(phong_shader.position, 3, GL_FLOAT, GL_FALSE, 0, v);
-    glVertexAttribPointer(phong_shader.tex_coord, 2, GL_FLOAT, GL_FALSE, 0, tc);
-    glEnableVertexAttribArray(phong_shader.position);
-    glVertexAttrib4Nub(phong_shader.color, coul.r, coul.g, coul.b, 0xFF);
-    glEnableVertexAttribArray(phong_shader.tex_coord);
-    glUniform2f(phong_shader.tex_scale, 1, 1);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    glDisableVertexAttribArray(phong_shader.position);
-    glDisableVertexAttribArray(phong_shader.tex_coord);
-    glDisable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, 0);
     glUseProgram(prev_program);
 }
