@@ -25,8 +25,6 @@
 #include "SDL_opengl.h"
 
 int *mapping;
-static uint8_t preca[256];
-static GLuint precatex;
 
 static struct {
     GLuint program;
@@ -34,28 +32,8 @@ static struct {
     GLint tex_scale, texture;
 } map_shader;
 
-#define MAX_PRECA 180
 void initmapping(void)
 {
-    GLubyte texbuf[256*256];
-    for (int a = 0; a < 256; a++) {
-        preca[a] = MAX_PRECA * exp(-a/50.);
-    }
-    for (int a = 0; a < 256; a++) {
-        for (int b = 0; b < 256; b++) {
-            texbuf[256*a+b] = MAX_PRECA * exp(-hypot(a,b)/50.);
-        }
-    }
-    glGenTextures(1, &precatex);
-    glBindTexture(GL_TEXTURE_2D, precatex);
-    glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_LUMINANCE, 256, 256, 0, GL_LUMINANCE,
-            GL_UNSIGNED_BYTE, texbuf);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
     GLuint map_fragment_shader = compile_shader(
         GL_FRAGMENT_SHADER, __FILE__, __LINE__,
         "#version 130\n"

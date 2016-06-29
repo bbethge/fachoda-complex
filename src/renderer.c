@@ -28,6 +28,9 @@
 #include "heightfield.h"
 #include "SDL_opengl.h"
 
+#define STRING(x) #x
+#define XSTRING(x) STRING(x)
+
 struct {
     GLuint program;
     GLint position, color;
@@ -36,11 +39,16 @@ struct {
 static struct {
     GLuint program;
     GLint position, normal, color;
-    GLint light_matrix;
+    GLint light_matrix, preca;
 } phong_shader;
+
+#define MAX_PRECA 180
+#define PRECA_SIZE 256
+static GLuint precatex;
 
 struct vectorlum *pts;
 struct matrix *oL;
+
 void initrender() {
     pts = malloc(3000*sizeof(*pts));   // nbpts max par objets
 #define MAXNO 5000
@@ -74,6 +82,19 @@ void initrender() {
         );
     }
 
+    GLubyte preca[PRECA_SIZE];
+    for (int a = 0; a < PRECA_SIZE; a++) {
+        preca[a] = MAX_PRECA * exp(-a/50.);
+    }
+    glGenTextures(1, &precatex);
+    glBindTexture(GL_TEXTURE_1D, precatex);
+    glTexImage1D(
+            GL_TEXTURE_1D, 0, GL_RED, PRECA_SIZE, 0, GL_RED,
+            GL_UNSIGNED_BYTE, preca);
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_1D, 0);
+
     GLuint phong_vertex_shader = compile_shader(
         GL_VERTEX_SHADER, __FILE__, __LINE__,
         "#version 130\n"
@@ -93,7 +114,7 @@ void initrender() {
         "    VaryingColor = Color;\n"
         "    // on calcule aussi les projs des\n"
         "    // norms dans le plan lumineux infiniment éloigné\n"
-        "    LightVector = LightMatrix * Normal;\n"
+        "    LightVector = LightMatrix * Normal / (1<<"XSTRING(vf)");\n"
         "    gl_ClipDistance[0] = gl_Position.w - gl_Position.x;\n"
         "    gl_ClipDistance[1] = gl_Position.w + gl_Position.x;\n"
         "    gl_ClipDistance[2] = gl_Position.w - gl_Position.y;\n"
@@ -109,11 +130,13 @@ void initrender() {
         "in vec4 VaryingColor;\n"
         "in vec3 LightVector;\n"
         "\n"
+        "uniform sampler1D Preca;\n"
+        "\n"
         "void main() {\n"
         "    gl_FragColor = VaryingColor;\n"
         "    if (LightVector.z < 0) {\n"
         "        gl_FragColor.rgb +=\n"
-        "            vec3(180./255*exp(-length(LightVector.xy)/50));\n"
+        "            texture(Preca, length(LightVector.xy)).r;\n"
         "    }\n"
         "}\n"
     );
@@ -128,9 +151,11 @@ void initrender() {
     phong_shader.light_matrix = glGetUniformLocation(
         phong_shader.program, "LightMatrix"
     );
+    phong_shader.preca = glGetUniformLocation(phong_shader.program, "Preca");
     if (
         phong_shader.position < 0 || phong_shader.normal < 0
         || phong_shader.color < 0 || phong_shader.light_matrix < 0
+        || phong_shader.preca < 0
     ) {
         SDL_ShowSimpleMessageBox(
             SDL_MESSAGEBOX_ERROR, "Error", "Invalid shader program "
@@ -664,6 +689,9 @@ static void render_obj(int o, int no)
                 GLuint prev_program;
                 glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
                 glUseProgram(phong_shader.program);
+                glBindTexture(GL_TEXTURE_1D, precatex);
+                glEnable(GL_TEXTURE_1D);
+                glUniform1i(phong_shader.preca, 0);
                 struct vector *pt[3];
                 struct vector *n[3];
                 for (int i = 0; i < 3; i++) {
@@ -705,6 +733,8 @@ static void render_obj(int o, int no)
                 glDrawArrays(GL_TRIANGLES, 0, 3);
                 glDisableVertexAttribArray(phong_shader.position);
                 glDisableVertexAttribArray(phong_shader.normal);
+                glDisable(GL_TEXTURE_1D);
+                glBindTexture(GL_TEXTURE_1D, 0);
                 glUseProgram(prev_program);
             }
             glDisable(GL_CULL_FACE);
