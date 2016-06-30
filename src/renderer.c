@@ -33,8 +33,8 @@
 
 struct {
     GLuint program;
-    GLint position, color;
-} blob_shader;
+    GLint position, color, size;
+} phare_shader, blob_shader;
 
 static struct {
     GLuint program;
@@ -54,28 +54,95 @@ void initrender() {
 #define MAXNO 5000
     oL = malloc(MAXNO*sizeof(*oL));   // nb objet max dans un ak
 
+    GLuint sphere_vertex_shader = compile_shader(
+        GL_VERTEX_SHADER, __FILE__, __LINE__,
+        "#version 130\n"
+        "\n"
+        "attribute vec4 Position;\n"
+        "attribute vec4 Color;\n"
+        "attribute float Size;\n"
+        "\n"
+        "out float gl_ClipDistance[2];\n"
+        "out vec4 VaryingColor;\n"
+        "\n"
+        "void main() {\n"
+        "    gl_Position = gl_ModelViewProjectionMatrix * Position;\n"
+        "    VaryingColor = Color;\n"
+        "    gl_PointSize = Size;\n"
+        "    // No horizontal clipping since the center of the blob may be\n"
+        "    // offscreen\n"
+        "    gl_ClipDistance[0] = gl_Position.w - gl_Position.z;\n"
+        "    gl_ClipDistance[1] = gl_Position.w + gl_Position.z;\n"
+        "}\n"
+    );
+    GLuint phare_fragment_shader = compile_shader(
+        GL_FRAGMENT_SHADER, __FILE__, __LINE__,
+        "#version 130\n"
+        "\n"
+        "in vec4 VaryingColor;\n"
+        "\n"
+        "void main() {\n"
+        "    vec2 PointCoord = 2*gl_PointCoord - 1;\n"
+        "    float Dist2 = dot(PointCoord, PointCoord);\n"
+        "    if (Dist2 < 1) {\n"
+        "        gl_FragColor.rgb =\n"
+        "            VaryingColor.rgb\n"
+        "            * max(sqrt(1 - Dist2), abs(PointCoord.x));\n"
+        "        gl_FragColor.a = VaryingColor.a;\n"
+        "    }\n"
+        "    else {\n"
+        "        discard;\n"
+        "    }\n"
+        "}\n"
+    );
+    phare_shader.program = link_shader_program(
+        __FILE__, __LINE__, sphere_vertex_shader, phare_fragment_shader
+    );
+    phare_shader.position = glGetAttribLocation(
+        phare_shader.program, "Position"
+    );
+    phare_shader.color = glGetAttribLocation(phare_shader.program, "Color");
+    phare_shader.size = glGetAttribLocation(phare_shader.program, "Size");
+    if (
+        phare_shader.position < 0 || phare_shader.color < 0
+        || phare_shader.size < 0
+    ) {
+        SDL_ShowSimpleMessageBox(
+            SDL_MESSAGEBOX_ERROR, "Error", "Invalid shader program "
+            "(unable to access vertex attributes or uniforms)", NULL
+        );
+    }
+
     GLuint blob_fragment_shader = compile_shader(
         GL_FRAGMENT_SHADER, __FILE__, __LINE__,
         "#version 130\n"
         "\n"
         "in vec4 VaryingColor;\n"
-        "in vec2 VaryingTexCoord;\n"
         "\n"
         "void main() {\n"
-        "    gl_FragColor.rgb =\n"
-        "        VaryingColor.rgb\n"
-        "        * sqrt(1 - dot(gl_PointCoord, gl_PointCoord));\n"
-        "    gl_FragColor.a = 1;\n"
+        "    vec2 PointCoord = 2*gl_PointCoord - 1;\n"
+        "    float Dist2 = dot(PointCoord, PointCoord);\n"
+        "    if (Dist2 < 1) {\n"
+        "        gl_FragColor.rgb = VaryingColor.rgb * sqrt(1 - Dist2);\n"
+        "        gl_FragColor.a = VaryingColor.a;\n"
+        "    }\n"
+        "    else {\n"
+        "        discard;\n"
+        "    }\n"
         "}\n"
     );
     blob_shader.program = link_shader_program(
-        __FILE__, __LINE__, default_vertex_shader, blob_fragment_shader
+        __FILE__, __LINE__, sphere_vertex_shader, blob_fragment_shader
     );
     blob_shader.position = glGetAttribLocation(
         blob_shader.program, "Position"
     );
     blob_shader.color = glGetAttribLocation(blob_shader.program, "Color");
-    if (blob_shader.position < 0 || blob_shader.color < 0) {
+    blob_shader.size = glGetAttribLocation(blob_shader.program, "Size");
+    if (
+        blob_shader.position < 0 || blob_shader.color < 0
+        || blob_shader.size < 0
+    ) {
         SDL_ShowSimpleMessageBox(
             SDL_MESSAGEBOX_ERROR, "Error", "Invalid shader program "
             "(unable to access vertex attributes or uniforms)", NULL
@@ -446,79 +513,58 @@ void calcposa(void)
 
 // Add yellow with amplitude 190*max(sqrt(r**2-(xx-x)**2-(yy-y)**2), |xx-x|)/r
 // to the videobuffer within the disk (xx-x)**2+(yy-y)**2 < r**2.
-// FIXME: currently just draws a simple yellow glow.
 void plotphare(int x, int y, int r) {
-    int i, n=MAX(4+r/4,180);
-    GLfloat v[182][2];
-    GLubyte c[182][3];
-    v[0][0] = x; v[0][1] = y;
-    c[0][0] = c[0][1] = 190; c[0][2] = 0;
-    for (i=0; i<=n; i++) {
-        v[1+i][0] = x+r*cosf(2*M_PI*i/n); v[1+i][1] = y+r*sinf(2*M_PI*i/n);
-        c[1+i][0] = c[1+i][1] = c[1+i][2] = 0;
+    GLuint prev_program;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+    glUseProgram(phare_shader.program);
+    for (int i = 2; i < 6; i++) {
+        glDisable(GL_CLIP_DISTANCE0 + i);
     }
+    glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
     glVertexAttribPointer(
-        default_shader.position, 2, GL_FLOAT, GL_FALSE,
-        (GLubyte*)v[1] - (GLubyte*)v[0], v
-    );
-    glVertexAttribPointer(
-        default_shader.color, 3, GL_UNSIGNED_BYTE, GL_TRUE,
-        (GLubyte*)c[1] - (GLubyte*)c[0], c
+        phare_shader.position, 2, GL_FLOAT, GL_FALSE, 0,
+        (GLfloat [2]) { x, y }
     );
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    glEnableVertexAttribArray(default_shader.position);
-    glEnableVertexAttribArray(default_shader.color);
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 2+n);
-    glDisableVertexAttribArray(default_shader.position);
-    glDisableVertexAttribArray(default_shader.color);
+    glEnableVertexAttribArray(phare_shader.position);
+    glVertexAttrib4Nub(phare_shader.color, 190, 190, 0, 0xFF);
+    glVertexAttrib1f(phare_shader.size, 2*r);
+    glDrawArrays(GL_POINTS, 0, 1);
+    glDisableVertexAttribArray(phare_shader.position);
     glBlendFunc(GL_ONE, GL_ONE);
     glDisable(GL_BLEND);
+    glDisable(GL_VERTEX_PROGRAM_POINT_SIZE);
+    for (int i = 2; i < 6; i++) {
+        glEnable(GL_CLIP_DISTANCE0 + i);
+    }
+    glUseProgram(prev_program);
 }
 
 // Draw grey with value inten*sqrt(r**2-(xx-x)**2-(yy-y)**2)
 // within the disk (xx-x)**2+(yy-y)**2 < r**2.
 static void plotblob(int x, int y, int r, int inten) {
-    int n_rad=MIN(1+r/4,256), n_circ=MIN(4+r/2,180);
-    GLfloat *v;
-    GLubyte *c;
-    int i_rad, i_circ;
-    GLubyte lum_i, lum_o;
-    v = malloc(255*181*2*2*sizeof(v[0]));
-    c = malloc(255*181*2*3*sizeof(c[0]));
-    glVertexAttribPointer(default_shader.position, 2, GL_FLOAT, GL_FALSE, 0, v);
+    GLuint prev_program;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+    glUseProgram(blob_shader.program);
+    for (int i = 2; i < 6; i++) {
+        glDisable(GL_CLIP_DISTANCE0 + i);
+    }
+    glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
     glVertexAttribPointer(
-        default_shader.color, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, c
+        blob_shader.position, 2, GL_FLOAT, GL_FALSE, 0,
+        (GLfloat [2]) { x, y }
     );
-    glEnableVertexAttribArray(default_shader.position);
-    glEnableVertexAttribArray(default_shader.color);
-    v[0] = x; v[1] = y;
-    c[0] = c[1] = c[2] = inten;
-    lum_o = inten*sqrtf(1-1.f/(n_rad*n_rad));
-    for (i_circ = 0; i_circ <= n_circ; i_circ++) {
-        v[(1+i_circ)*2] = x+r/(float)n_rad*cosf(2*M_PI*i_circ/n_circ);
-        v[(1+i_circ)*2+1] = y+r/(float)n_rad*sinf(2*M_PI*i_circ/n_circ);
-        c[(1+i_circ)*3] = c[(1+i_circ)*3+1] = c[(1+i_circ)*3+2] = lum_o;
+    glEnableVertexAttribArray(blob_shader.position);
+    glVertexAttrib4Nub(blob_shader.color, inten, inten, inten, 0xFF);
+    glVertexAttrib1f(blob_shader.size, 2*r);
+    glDrawArrays(GL_POINTS, 0, 1);
+    glDisableVertexAttribArray(blob_shader.position);
+    glDisable(GL_VERTEX_PROGRAM_POINT_SIZE);
+    for (int i = 2; i < 6; i++) {
+        glEnable(GL_CLIP_DISTANCE0 + i);
     }
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 2+n_circ);
-    for (i_rad = 2; i_rad <= n_rad; i_rad++) {
-        lum_i = lum_o;
-        lum_o = inten*sqrtf(1-((float)i_rad/n_rad)*((float)i_rad/n_rad));
-        for (i_circ = 0; i_circ <= n_circ; i_circ++) {
-            int i = ((n_circ+1)*(i_rad-2) + i_circ)*2;
-            v[i*2] = x+r*(float)(i_rad-1)/n_rad*cosf(2*M_PI*i_circ/n_circ);
-            v[i*2+1] = y+r*(float)(i_rad-1)/n_rad*sinf(2*M_PI*i_circ/n_circ);
-            c[i*3] = c[i*3+1] = c[i*3+2] = lum_i;
-            v[(i+1)*2] = x+r*(float)i_rad/n_rad*cosf(2*M_PI*i_circ/n_circ);
-            v[(i+1)*2+1] = y+r*(float)i_rad/n_rad*sinf(2*M_PI*i_circ/n_circ);
-            c[(i+1)*3] = c[(i+1)*3+1] = c[(i+1)*3+2] = lum_o;
-        }
-    }
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 2*(n_circ+1)*(n_rad-1));
-    glDisableVertexAttribArray(default_shader.position);
-    glDisableVertexAttribArray(default_shader.color);
-    free(v);
-    free(c);
+    glUseProgram(prev_program);
 }
 
 // Lighten the pixels in the videobuffer within the disk
